@@ -304,26 +304,32 @@ export class InkLayer {
     const id = this.selected;
     if (!id) return false;
     this.selected = null;
-    // Arrows tied to a removed shape stay where they were.
-    const byId = new Map(this.items.map((item) => [item.id, item]));
-    this.host.commit(
-      this.items
-        .filter((item) => item.id !== id)
-        .map((item) => {
-          if ((item.t !== "line" && item.t !== "arrow") || (item.from !== id && item.to !== id)) return item;
-          const [x1, y1, x2, y2] = lineEnds(item, byId);
-          return { ...item, x1, y1, x2, y2, from: item.from === id ? undefined : item.from, to: item.to === id ? undefined : item.to };
-        }),
-    );
+    this.host.commit(this.without(new Set([id])));
     return true;
   }
 
-  /** Gives the selected item the chosen colour or width. */
-  restyle() {
-    const chosen = this.items.find((item) => item.id === this.selected);
-    if (!chosen) return;
-    const width = chosen.t === "pen" || chosen.t === "line" || chosen.t === "arrow" ? { w: pen.width } : {};
-    this.host.commit(this.items.map((item) => (item.id === chosen.id ? ({ ...item, c: pen.color, ...width } as Item) : item)));
+  /** The drawing without `ids`. Arrows tied to a removed shape stay where they were. */
+  without(ids: Set<string>): Item[] {
+    const byId = new Map(this.items.map((item) => [item.id, item]));
+    return this.items
+      .filter((item) => !ids.has(item.id))
+      .map((item) => {
+        if ((item.t !== "line" && item.t !== "arrow") || !(ids.has(item.from ?? "") || ids.has(item.to ?? ""))) return item;
+        const [x1, y1, x2, y2] = lineEnds(item, byId);
+        return { ...item, x1, y1, x2, y2, from: ids.has(item.from ?? "") ? undefined : item.from, to: ids.has(item.to ?? "") ? undefined : item.to };
+      });
+  }
+
+  /** Gives the selected item (or the items `ids`) the chosen colour, and lines the chosen width. */
+  restyle(ids = new Set(this.selected ? [this.selected] : [])) {
+    if (!this.items.some((item) => ids.has(item.id))) return;
+    this.host.commit(
+      this.items.map((item) => {
+        if (!ids.has(item.id)) return item;
+        const width = item.t === "pen" || item.t === "line" || item.t === "arrow" ? { w: pen.width } : {};
+        return { ...item, c: pen.color, ...width } as Item;
+      }),
+    );
   }
 
   /** Writes the words inside a box, circle or diamond, in a box over the page. */

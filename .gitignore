@@ -13,3 +13,6 @@ samples
 # written by npm run smoke:shots
 test-screenshots
 *.tmp.mjs
+
+# copied from pdfjs-dist by scripts/copy-pdfjs-assets.mjs
+public/pdfjs

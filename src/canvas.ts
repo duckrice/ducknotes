@@ -6,9 +6,9 @@
 import { redo as editorRedo, undo as editorUndo, undoDepth } from "prosemirror-history";
 import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { h } from "./dom";
+import { h, svg } from "./dom";
 import { createState, createView, insertPictures, searchKey, stepSize } from "./editor";
-import { bounds, newItemId, type Item } from "./geometry";
+import { bounds, lassoTest, movedTogether, newItemId, type Box, type Item } from "./geometry";
 import { InkLayer, pen, type Tool } from "./ink";
 import { emptyDoc, schema } from "./schema";
 import { pictureUrl, savePicture, type BoxItem, type PageFile, type PageItem, type Paper, type PictureItem } from "./store";
@@ -29,6 +29,7 @@ export interface CanvasHooks {
   onTitle(title: string): void;
   onZoom(zoom: number): void;
   onTool(tool: Tool): void;
+  onError(what: string, error: unknown): void;
 }
 
 interface Snapshot {
@@ -94,13 +95,16 @@ class Picture {
   ) {
     const img = h("img", { alt: "", draggable: "false" });
     const handle = h("span", { class: "picture-handle", title: "Drag to resize" });
-    this.el = h("div", { class: "picture", "data-id": item.id }, img, handle);
+    this.el = h("div", { class: item.slide ? "picture slide" : "picture", "data-id": item.id }, img, handle);
     void pictureUrl(item.src).then(
       (url) => (img.src = url),
       () => this.el.classList.add("missing"),
     );
     img.addEventListener("load", () => canvas.fit());
-    this.el.addEventListener("pointerdown", (event) => canvas.dragObject(event, item.id, event.target === handle ? "width" : "move"));
+    // A slide is written on like the page: it moves with the select tool.
+    this.el.addEventListener("pointerdown", (event) => {
+      if (event.target === handle || !item.slide) canvas.dragObject(event, item.id, event.target === handle ? "width" : "move");
+    });
     this.place();
   }
 
@@ -128,6 +132,10 @@ export class Canvas {
   active: TextBox | null = null;
   /** A picture or text box picked with a click, for moving or deleting. */
   private chosen: string | null = null;
+  /** Things picked together with the select tool's lasso: ink, text boxes and pictures. */
+  private group = new Set<string>();
+  /** The lasso and the frame round the things it picked, over the drawing. */
+  private overlay = svg("g");
   /** Where the next pasted thing goes: the last place clicked. */
   private spot: [number, number] | null = null;
   zoom = 1;
@@ -164,6 +172,7 @@ export class Canvas {
       world: this.world,
     });
     this.world.append(this.ink.svg);
+    this.ink.svg.append(this.overlay);
     for (const item of page.items) {
       if (item.t === "box") this.addBox(item, item.doc);
       else if (item.t === "picture") this.addPicture(item);
@@ -270,6 +279,7 @@ export class Canvas {
     pen.tool = tool;
     this.world.dataset.tool = tool;
     if (tool !== "select") this.ink.selected = null;
+    this.setGroup([]);
     if (tool !== "type") {
       this.choose(null);
       // Keys now pick tools rather than type.
@@ -287,7 +297,7 @@ export class Canvas {
 
   /** Colour or width chosen: the selected drawing takes it too. */
   restyle() {
-    if (pen.tool === "select") this.ink.restyle();
+    if (pen.tool === "select") this.ink.restyle(this.group.size ? this.group : undefined);
   }
 
   // ---- the mouse ------------------------------------------------------------------
@@ -302,16 +312,30 @@ export class Canvas {
       this.ink.down(event, "pen");
       return;
     }
-    if (pen.tool === "select" && !this.ink.hasItemAt(event)) {
-      event.stopPropagation();
-      this.ink.selected = null;
-      this.ink.draw();
-      this.pan(event);
+    if (pen.tool !== "select" || event.button !== 0) return;
+    const [x, y] = this.point(event);
+    const frame = this.groupBounds();
+    const inFrame = frame && x >= frame.x && x <= frame.x + frame.w && y >= frame.y && y <= frame.y + frame.h;
+    if (!inFrame && this.ink.hasItemAt(event)) {
+      // One drawing on its own: the drawing layer moves, resizes and labels it.
+      this.setGroup([]);
+      return;
     }
+    event.stopPropagation();
+    event.preventDefault();
+    this.ink.selected = null;
+    this.ink.draw();
+    if (!inFrame) {
+      const thing = this.thingAt(x, y);
+      this.setGroup(thing ? [thing] : []);
+      if (!thing) return this.lasso(event);
+    }
+    this.moveGroup(event);
   }
 
   private down(event: PointerEvent) {
-    if (event.target !== this.world || event.button !== 0) return;
+    const onSlide = (event.target as Element).closest(".picture.slide img");
+    if ((event.target !== this.world && !onSlide) || event.button !== 0) return;
     // An empty spot: a click starts a text box there; a drag moves the view.
     event.preventDefault();
     this.choose(null);
@@ -404,6 +428,20 @@ export class Canvas {
   /** Delete or Backspace outside the text: removes what's picked. */
   removeChosen(): boolean {
     if (this.ink.removeSelected()) return true;
+    if (this.group.size) {
+      this.record();
+      for (const id of this.group) {
+        const box = this.boxes.get(id);
+        if (box) this.removeBox(box, false);
+        this.pictures.get(id)?.el.remove();
+        this.pictures.delete(id);
+      }
+      this.inkItems = this.ink.without(this.group);
+      this.ink.refresh();
+      this.setGroup([]);
+      this.changed(true);
+      return true;
+    }
     const id = this.chosen;
     if (!id) return false;
     this.record();
@@ -417,6 +455,122 @@ export class Canvas {
     this.choose(null);
     this.changed(true);
     return true;
+  }
+
+  // ---- the lasso: picking several things -------------------------------------------
+
+  /** Where a text box or picture is, in page units. */
+  private rectOf(id: string): Box | null {
+    const thing = this.boxes.get(id) ?? this.pictures.get(id);
+    if (!thing) return null;
+    return { x: thing.item.x, y: thing.item.y, w: thing.item.w, h: thing.el.getBoundingClientRect().height / this.scale };
+  }
+
+  /** The text box or picture at (x, y), the one on top first. Slides are left out:
+   * a lasso starts on them, to pick what's written there (a lasso round a slide picks it). */
+  private thingAt(x: number, y: number): string | undefined {
+    const ids = [...[...this.pictures.values()].filter((p) => !p.item.slide).map((p) => p.item.id), ...this.boxes.keys()].reverse();
+    return ids.find((id) => {
+      const r = this.rectOf(id)!;
+      return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    });
+  }
+
+  /** The frame round everything picked, or null when nothing is. */
+  private groupBounds(): Box | null {
+    const byId = new Map(this.inkItems.map((item) => [item.id, item]));
+    const boxes = [...this.group].map((id) => (byId.has(id) ? bounds(byId.get(id)!, byId) : this.rectOf(id))).filter((b): b is Box => !!b);
+    if (!boxes.length) return null;
+    const x = Math.min(...boxes.map((b) => b.x));
+    const y = Math.min(...boxes.map((b) => b.y));
+    return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
+  }
+
+  private setGroup(ids: Iterable<string>) {
+    this.group = new Set(ids);
+    this.choose(null);
+    for (const id of this.group) (this.boxes.get(id) ?? this.pictures.get(id))?.el.classList.add("chosen");
+    this.drawGroup();
+  }
+
+  private drawGroup(lasso?: number[]) {
+    const frame = this.groupBounds();
+    this.overlay.replaceChildren(
+      ...(frame ? [svg("rect", { class: "ink-selection group", x: frame.x - 8, y: frame.y - 8, width: frame.w + 16, height: frame.h + 16, rx: 6 })] : []),
+      ...(lasso ? [svg("polygon", { class: "lasso", points: lasso.join(" ") })] : []),
+    );
+  }
+
+  /** Picks everything on the page (Ctrl+A with the select tool). */
+  selectAll() {
+    this.ink.selected = null;
+    this.ink.draw();
+    this.setGroup([...this.inkItems.map((item) => item.id), ...this.boxes.keys(), ...this.pictures.keys()]);
+  }
+
+  /** Draws a loop round things, or drags a rectangle over them, to pick them. */
+  private lasso(event: PointerEvent) {
+    const pts = [...this.point(event)];
+    const el = this.world;
+    el.setPointerCapture(event.pointerId);
+    const move = (e: PointerEvent) => {
+      pts.push(...this.point(e));
+      this.drawGroup(pts);
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+      if (pts.length < 6) return this.drawGroup();
+      const inside = lassoTest(pts);
+      const centre = (b: Box) => inside(b.x + b.w / 2, b.y + b.h / 2);
+      const byId = new Map(this.inkItems.map((item) => [item.id, item]));
+      this.setGroup([
+        ...this.inkItems.filter((item) => centre(bounds(item, byId))).map((item) => item.id),
+        ...[...this.boxes.keys(), ...this.pictures.keys()].filter((id) => centre(this.rectOf(id)!)),
+      ]);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }
+
+  /** Drags everything picked, as one step to undo. */
+  private moveGroup(event: PointerEvent) {
+    const frame = this.groupBounds();
+    if (!frame) return;
+    const before = this.snapshot();
+    const start = this.point(event);
+    const things = [...this.group].map((id) => this.boxes.get(id) ?? this.pictures.get(id)).filter((t) => !!t);
+    const from = things.map((t) => [t.item.x, t.item.y]);
+    const ink = this.inkItems;
+    let dx = 0;
+    let dy = 0;
+    const el = this.world;
+    el.setPointerCapture(event.pointerId);
+    const move = (e: PointerEvent) => {
+      const [x, y] = this.point(e);
+      // Nothing goes off the top or left of the page.
+      dx = Math.round(Math.max(x - start[0], -frame.x));
+      dy = Math.round(Math.max(y - start[1], -frame.y));
+      things.forEach((t, i) => {
+        t.item.x = from[i][0] + dx;
+        t.item.y = from[i][1] + dy;
+        t.place();
+      });
+      this.inkItems = movedTogether(ink, this.group, dx, dy);
+      this.ink.draw();
+      this.drawGroup();
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+      if (!dx && !dy) return;
+      this.record(before);
+      this.changed(true);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
   }
 
   // ---- text boxes -------------------------------------------------------------------
@@ -475,7 +629,7 @@ export class Canvas {
   private addPicture(item: PictureItem): Picture {
     const pic = new Picture(item, this);
     this.pictures.set(item.id, pic);
-    this.world.insertBefore(pic.el, this.ink.svg);
+    this.world.insertBefore(pic.el, this.world.querySelector(".box") ?? this.ink.svg);
     return pic;
   }
 
@@ -486,7 +640,7 @@ export class Canvas {
   }
 
   /** Places pictures on the page at (x, y), one under the other. */
-  async placePictures(files: File[], at = this.insertionPoint()) {
+  async placePictures(files: File[], at = this.insertionPoint(), slides = false) {
     const before = this.snapshot();
     let [x, y] = at;
     const placed: PictureItem[] = [];
@@ -494,8 +648,8 @@ export class Canvas {
       const src = await savePicture(file);
       const size = await pictureSize(src);
       const w = Math.round(Math.min(size.w, 720));
-      placed.push({ t: "picture", id: newItemId(), x: Math.round(x), y: Math.round(y), w, src });
-      y += (size.h * w) / size.w + 16;
+      placed.push({ t: "picture", id: newItemId(), x: Math.round(x), y: Math.round(y), w, src, ...(slides ? { slide: true as const } : {}) });
+      y += (size.h * w) / size.w + (slides ? 32 : 16);
     }
     if (!placed.length) return;
     this.record(before);
@@ -504,6 +658,12 @@ export class Canvas {
     this.choose(placed[placed.length - 1].id);
     this.fit();
     this.changed(true);
+  }
+
+  /** A PDF's pages as slides, one under the other, to write and draw on. */
+  async placeSlides(file: File, at = this.insertionPoint()) {
+    const { pdfPages } = await import("./slides");
+    await this.placePictures(await pdfPages(file), at, true);
   }
 
   /** Pictures pasted while writing: into the text, or, in a box that's still empty, onto the page in its place. */
@@ -541,10 +701,13 @@ export class Canvas {
 
   private drop(event: DragEvent) {
     if ((event.target as Element).closest(".ProseMirror")) return;
-    const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
-    if (!files.length) return;
+    const all = [...(event.dataTransfer?.files ?? [])];
+    const files = all.filter((f) => f.type.startsWith("image/"));
+    const pdf = all.find((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!files.length && !pdf) return;
     event.preventDefault();
-    void this.placePictures(files, this.point(event));
+    if (pdf) void this.placeSlides(pdf, this.point(event)).catch((error) => this.hooks.onError("The slides could not be added", error));
+    else void this.placePictures(files, this.point(event));
   }
 
   // ---- undo -----------------------------------------------------------------------
@@ -583,7 +746,7 @@ export class Canvas {
     for (const item of snapshot.pictures) this.addPicture({ ...item });
     this.inkItems = snapshot.ink;
     this.ink.refresh();
-    this.choose(null);
+    this.setGroup([]);
     this.fit();
     this.changed(true);
   }

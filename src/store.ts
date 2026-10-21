@@ -9,8 +9,8 @@ import type { Item } from "./geometry";
 export type Paper = "plain" | "lines" | "grid";
 /** A text box on the page, holding its text as ProseMirror JSON. */
 export type BoxItem = { t: "box"; id: string; x: number; y: number; w: number; doc: unknown };
-/** A picture placed on the page. */
-export type PictureItem = { t: "picture"; id: string; x: number; y: number; w: number; src: string };
+/** A picture placed on the page; `slide` marks a page of lecture slides, to write on. */
+export type PictureItem = { t: "picture"; id: string; x: number; y: number; w: number; src: string; slide?: true };
 /** Everything on a page: text boxes, pictures, and ink and shapes (drawn on top). */
 export type PageItem = BoxItem | PictureItem | Item;
 

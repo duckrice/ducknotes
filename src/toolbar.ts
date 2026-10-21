@@ -40,6 +40,8 @@ export interface ToolbarHooks {
   view(): EditorView | null;
   canvas(): Canvas | null;
   insertPicture(): void;
+  /** Lecture slides from a PDF, to write on. */
+  insertSlides(): void;
 }
 
 export function createToolbar(hooks: ToolbarHooks) {
@@ -311,6 +313,7 @@ export function createToolbar(hooks: ToolbarHooks) {
         { class: "tb-group" },
         table,
         button("picture", "Picture (or just paste one with Ctrl+V)", () => hooks.insertPicture()),
+        button("pdf", "Slides from a PDF, to write and draw on (or drop the PDF on the page)", () => hooks.insertSlides()),
         button("equation", "Equation (Alt+=)", () => {
           const view = hooks.view();
           if (view) insertEquation(view);

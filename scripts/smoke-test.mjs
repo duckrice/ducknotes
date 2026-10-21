@@ -399,5 +399,92 @@ await session(9472, async (app) => {
   check("no errors after starting again", app.errors.length === 0, app.errors.join("; "));
 });
 
+// ---- lecture slides and the lasso ------------------------------------------
+
+/** A small PDF with `count` pages of 400 × 300 points, each with a filled box. */
+function makePdf(count) {
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", ""];
+  const kids = [];
+  for (let i = 0; i < count; i++) {
+    const content = `0.2 0.4 0.8 rg 40 40 ${120 + i * 100} 200 re f`;
+    kids.push(`${objects.length + 1} 0 R`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Contents ${objects.length + 2} 0 R >>`);
+    objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  }
+  objects[1] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${count} >>`;
+  let pdf = "%PDF-1.4\n";
+  const offsets = objects.map((body, i) => {
+    const at = pdf.length;
+    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+    return at;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  return `${pdf}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+}
+
+await session(9473, async (app) => {
+  await app.key("n", 78, 2);
+  await app.waitFor(`document.querySelector(".page-title")?.value === ""`);
+  await app.type("Lecture 2");
+  // The Slides button's file picker, given a PDF as if chosen.
+  check("the toolbar has a button for slides", (await app.count(`.toolbar .tb[title^="Slides from a PDF"]`)) === 1);
+  await app.evaluate(`(() => {
+    const input = document.querySelector(".slides-input");
+    const data = new DataTransfer();
+    data.items.add(new File([${JSON.stringify(makePdf(2))}], "Lecture 2.pdf", { type: "application/pdf" }));
+    input.files = data.files;
+    input.dispatchEvent(new Event("change"));
+  })()`);
+  check("each page of the PDF becomes a slide", await app.waitFor(`[...document.querySelectorAll(".picture.slide img")].filter((img) => img.naturalWidth === 1600).length === 2`, 20000), String(await app.count(".picture.slide")));
+  const slides = (await canvasItems(app)).filter((i) => i.t === "picture");
+  check("one under the other, marked as slides", slides.length === 2 && slides.every((s) => s.slide && s.w === 720 && s.x === 48) && slides[1].y > slides[0].y + 540, JSON.stringify(slides));
+
+  // Clicking a slide writes on it rather than moving it.
+  const [sx, sy] = await spot(app, 300, 300);
+  await app.click(sx, sy);
+  await app.type("Remember this");
+  let items = await canvasItems(app);
+  const note = items.find((i) => i.t === "box");
+  check("clicking a slide starts a text box on it", !!note && Math.abs(note.x - 300) < 2 && JSON.stringify(note.doc).includes("Remember this"), JSON.stringify(note));
+  check("and the slide stays put", items.find((i) => i.id === slides[0].id)?.x === 48);
+  check("text written on a slide shows over it", await app.evaluate(`document.querySelector(".picture.slide").compareDocumentPosition(document.querySelector(".box")) === Node.DOCUMENT_POSITION_FOLLOWING`));
+
+  // The lasso: a drag round the first slide and the note picks both.
+  await app.evaluate(`document.activeElement?.blur()`);
+  await app.key("v", 86);
+  await dragOn(app, 20, 90, 840, 670);
+  check("dragging round things with the select tool picks them", (await app.count(".chosen")) === 2 && (await app.count(".ink-selection.group")) === 1, String(await app.count(".chosen")));
+  await dragOn(app, 400, 400, 500, 450);
+  items = await canvasItems(app);
+  const moved = (id) => items.find((i) => i.id === id);
+  check("dragging them moves them together", moved(slides[0].id).x === 148 && moved(note.id).x === note.x + 100 && moved(note.id).y === note.y + 50, JSON.stringify([moved(slides[0].id), moved(note.id)].map((i) => [i.x, i.y])));
+  check("and leaves the rest", moved(slides[1].id).x === 48);
+  await app.key("z", 90, 2);
+  items = await canvasItems(app);
+  check("Ctrl+Z puts them back in one step", moved(slides[0].id).x === 48 && moved(note.id).x === note.x);
+
+  // A loop drawn round a pen stroke picks it; Delete removes, Ctrl+Z restores.
+  await app.key("p", 80);
+  await dragOn(app, 100, 800, 200, 820);
+  await app.key("v", 86);
+  const [a1, a2, b1, b2, c1, c2, d1, d2] = await spots(app, [80, 760], [240, 770], [230, 860], [70, 850]);
+  await app.mouse("mouseMoved", a1, a2, { buttons: 0 });
+  await app.mouse("mousePressed", a1, a2);
+  for (const [x, y] of [[b1, b2], [c1, c2], [d1, d2], [a1, a2 + 4]]) await app.mouse("mouseMoved", x, y);
+  await app.mouse("mouseReleased", a1, a2 + 4);
+  check("a loop drawn round a drawing picks it", (await app.count(".ink-selection.group")) === 1 && (await app.count(".chosen")) === 0);
+  await app.key("Delete", 46);
+  check("Delete removes what's picked", !(await canvasItems(app)).some((i) => i.t === "pen"));
+  await app.key("z", 90, 2);
+  check("and Ctrl+Z brings it back", (await canvasItems(app)).some((i) => i.t === "pen"));
+  await app.key("a", 65, 2);
+  check("Ctrl+A with the select tool picks everything", (await app.count(".chosen")) === 3);
+  await app.key("Escape", 27);
+  check("Esc lets go", (await app.count(".chosen")) === 0 && (await app.count(".ink-selection.group")) === 0);
+  check("the slides are saved with the page", (await app.saved()) && readdirSync(join(notesDir, ".media")).filter((f) => f.endsWith(".jpg")).length === 2);
+  check("no errors with slides and the lasso", app.errors.length === 0, app.errors.join("; "));
+});
+
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

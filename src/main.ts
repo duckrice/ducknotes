@@ -46,6 +46,7 @@ const status = h("span", { class: "status-text", role: "status" });
 const emptyState = h("div", { class: "empty-state" });
 const canvasHost = h("div", { class: "canvas-host" }, emptyState);
 const pictureInput = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true }) as HTMLInputElement;
+const slidesInput = h("input", { type: "file", accept: ".pdf,application/pdf", hidden: true, class: "slides-input" }) as HTMLInputElement;
 
 /** The text box a picture from the Picture button goes into, if one had the cursor. */
 let pictureTarget: Canvas["active"] = null;
@@ -57,6 +58,7 @@ const toolbar = createToolbar({
     pictureTarget = active?.view.hasFocus() ? active : null;
     pictureInput.click();
   },
+  insertSlides: () => slidesInput.click(),
 });
 
 const app = document.getElementById("app")!;
@@ -76,6 +78,7 @@ app.append(
   h("aside", { class: "column pages" }, search, h("div", { class: "column-head" }, pagesHeading, newPageButton), pageList),
   h("main", { class: "page-area" }, toolbar.el, canvasHost, h("div", { class: "status" }, status, toolbar.zoomBar)),
   pictureInput,
+  slidesInput,
 );
 
 // ---- dates ------------------------------------------------------------------
@@ -335,6 +338,7 @@ async function openPage(info: PageInfo, save = true) {
         toolbar.showZoom(value);
       },
       onTool: () => toolbar.showPen(),
+      onError: failed,
     },
     zoom,
   );
@@ -423,6 +427,18 @@ pictureInput.addEventListener("change", () => {
   void (into ? canvas.picturesInBox(into, files, null) : canvas.placePictures(files)).catch((error) => failed("The picture could not be added", error));
 });
 
+slidesInput.addEventListener("change", () => {
+  const file = slidesInput.files?.[0];
+  slidesInput.value = "";
+  const canvas = current?.canvas;
+  if (!file || !canvas) return;
+  toast("Adding the slides…");
+  void canvas.placeSlides(file).then(
+    () => document.querySelector(".toast")?.remove(),
+    (error) => failed("The slides could not be added", error),
+  );
+});
+
 // Ctrl+V with no text box or field to take it: onto the page.
 document.addEventListener("paste", (event) => {
   const target = event.target as Element;
@@ -466,6 +482,7 @@ window.addEventListener("keydown", (event) => {
       search.select();
     } else if (key === "k" && !event.shiftKey && canvas?.active?.view.hasFocus()) toolbar.editLink();
     else if (key === "s") void flush();
+    else if (key === "a" && canvas && pen.tool === "select" && !isTyping(event.target)) canvas.selectAll();
     else if (canvas && !isTyping(event.target) && (key === "z" || key === "y")) {
       if (key === "y" || event.shiftKey) canvas.redo();
       else canvas.undo();
