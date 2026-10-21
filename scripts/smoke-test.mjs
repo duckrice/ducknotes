@@ -399,7 +399,7 @@ await session(9472, async (app) => {
   check("no errors after starting again", app.errors.length === 0, app.errors.join("; "));
 });
 
-// ---- lecture slides and the lasso ------------------------------------------
+// ---- lecture slides, and picking several things -----------------------------
 
 /** A small PDF with `count` pages of 400 × 300 points, each with a filled box. */
 function makePdf(count) {
@@ -450,7 +450,7 @@ await session(9473, async (app) => {
   check("and the slide stays put", items.find((i) => i.id === slides[0].id)?.x === 48);
   check("text written on a slide shows over it", await app.evaluate(`document.querySelector(".picture.slide").compareDocumentPosition(document.querySelector(".box")) === Node.DOCUMENT_POSITION_FOLLOWING`));
 
-  // The lasso: a drag round the first slide and the note picks both.
+  // Dragging a rectangle round the first slide and the note picks both.
   await app.evaluate(`document.activeElement?.blur()`);
   await app.key("v", 86);
   await dragOn(app, 20, 90, 840, 670);
@@ -464,16 +464,12 @@ await session(9473, async (app) => {
   items = await canvasItems(app);
   check("Ctrl+Z puts them back in one step", moved(slides[0].id).x === 48 && moved(note.id).x === note.x);
 
-  // A loop drawn round a pen stroke picks it; Delete removes, Ctrl+Z restores.
+  // A rectangle dragged round a pen stroke on a slide picks just the stroke; Delete removes, Ctrl+Z restores.
   await app.key("p", 80);
   await dragOn(app, 100, 800, 200, 820);
   await app.key("v", 86);
-  const [a1, a2, b1, b2, c1, c2, d1, d2] = await spots(app, [80, 760], [240, 770], [230, 860], [70, 850]);
-  await app.mouse("mouseMoved", a1, a2, { buttons: 0 });
-  await app.mouse("mousePressed", a1, a2);
-  for (const [x, y] of [[b1, b2], [c1, c2], [d1, d2], [a1, a2 + 4]]) await app.mouse("mouseMoved", x, y);
-  await app.mouse("mouseReleased", a1, a2 + 4);
-  check("a loop drawn round a drawing picks it", (await app.count(".ink-selection.group")) === 1 && (await app.count(".chosen")) === 0);
+  await dragOn(app, 80, 760, 240, 860);
+  check("a rectangle dragged round a drawing on a slide picks it", (await app.count(".ink-selection.group")) === 1 && (await app.count(".chosen")) === 0);
   await app.key("Delete", 46);
   check("Delete removes what's picked", !(await canvasItems(app)).some((i) => i.t === "pen"));
   await app.key("z", 90, 2);
@@ -483,7 +479,17 @@ await session(9473, async (app) => {
   await app.key("Escape", 27);
   check("Esc lets go", (await app.count(".chosen")) === 0 && (await app.count(".ink-selection.group")) === 0);
   check("the slides are saved with the page", (await app.saved()) && readdirSync(join(notesDir, ".media")).filter((f) => f.endsWith(".jpg")).length === 2);
-  check("no errors with slides and the lasso", app.errors.length === 0, app.errors.join("; "));
+  // Ctrl+drag moves the view, with any tool.
+  await app.evaluate(`document.querySelector(".canvas-scroll").scrollTo(0, 300)`);
+  const [px, py] = await app.evaluate(`(() => { const r = document.querySelector(".canvas-scroll").getBoundingClientRect(); return [r.left + 300, r.top + 300]; })()`);
+  const groupsBefore = await app.count(".ink-selection.group");
+  await app.mouse("mouseMoved", px, py, { buttons: 0, modifiers: 2 });
+  await app.mouse("mousePressed", px, py, { modifiers: 2 });
+  for (let i = 1; i <= 8; i++) await app.mouse("mouseMoved", px, py - i * 20, { modifiers: 2 });
+  await app.mouse("mouseReleased", px, py - 160, { modifiers: 2 });
+  const top = await app.evaluate(`document.querySelector(".canvas-scroll").scrollTop`);
+  check("Ctrl+drag moves the view instead of picking", top > 400 && (await app.count(".ink-selection.group")) === groupsBefore, `scrollTop ${top}`);
+  check("no errors with slides and picking", app.errors.length === 0, app.errors.join("; "));
 });
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");

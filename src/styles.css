@@ -537,7 +537,7 @@ body {
   outline: 2px solid var(--accent);
 }
 
-.lasso {
+.select-area {
   fill: rgba(15, 118, 110, 0.08);
   stroke: #0f766e;
   stroke-width: 1.5;

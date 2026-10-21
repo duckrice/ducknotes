@@ -8,7 +8,7 @@ import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { h, svg } from "./dom";
 import { createState, createView, insertPictures, searchKey, stepSize } from "./editor";
-import { bounds, lassoTest, movedTogether, newItemId, type Box, type Item } from "./geometry";
+import { bounds, movedTogether, newItemId, type Box, type Item } from "./geometry";
 import { InkLayer, pen, type Tool } from "./ink";
 import { emptyDoc, schema } from "./schema";
 import { pictureUrl, savePicture, type BoxItem, type PageFile, type PageItem, type Paper, type PictureItem } from "./store";
@@ -132,9 +132,9 @@ export class Canvas {
   active: TextBox | null = null;
   /** A picture or text box picked with a click, for moving or deleting. */
   private chosen: string | null = null;
-  /** Things picked together with the select tool's lasso: ink, text boxes and pictures. */
+  /** Things picked together with the select tool: ink, text boxes and pictures. */
   private group = new Set<string>();
-  /** The lasso and the frame round the things it picked, over the drawing. */
+  /** The rectangle being dragged and the frame round what it picked, over the drawing. */
   private overlay = svg("g");
   /** Where the next pasted thing goes: the last place clicked. */
   private spot: [number, number] | null = null;
@@ -302,10 +302,17 @@ export class Canvas {
 
   // ---- the mouse ------------------------------------------------------------------
 
-  /** Before anything else sees a press: a stylus writes even while typing, and the select tool pans on empty spots. */
+  /** Before anything else sees a press: Ctrl+drag moves the view, a stylus writes even while typing, and the select tool picks things. */
   private capture(event: PointerEvent) {
     const target = event.target as Element;
     if (target.closest(".ink-input, .page-head")) return;
+    // Ctrl+click in text is for links, so text boxes keep it.
+    if (event.ctrlKey && event.button === 0 && !target.closest(".ProseMirror")) {
+      event.stopPropagation();
+      event.preventDefault();
+      this.pan(event);
+      return;
+    }
     if (event.pointerType === "pen" && pen.tool === "type" && !target.closest(".box-bar, .box-grip, .picture-handle")) {
       event.stopPropagation();
       this.choose(null);
@@ -328,7 +335,7 @@ export class Canvas {
     if (!inFrame) {
       const thing = this.thingAt(x, y);
       this.setGroup(thing ? [thing] : []);
-      if (!thing) return this.lasso(event);
+      if (!thing) return this.selectArea(event);
     }
     this.moveGroup(event);
   }
@@ -457,7 +464,7 @@ export class Canvas {
     return true;
   }
 
-  // ---- the lasso: picking several things -------------------------------------------
+  // ---- picking several things --------------------------------------------------------
 
   /** Where a text box or picture is, in page units. */
   private rectOf(id: string): Box | null {
@@ -466,8 +473,8 @@ export class Canvas {
     return { x: thing.item.x, y: thing.item.y, w: thing.item.w, h: thing.el.getBoundingClientRect().height / this.scale };
   }
 
-  /** The text box or picture at (x, y), the one on top first. Slides are left out:
-   * a lasso starts on them, to pick what's written there (a lasso round a slide picks it). */
+  /** The text box or picture at (x, y), the one on top first. Slides are left out: dragging
+   * on them picks what's written there (a rectangle round a slide picks it). */
   private thingAt(x: number, y: number): string | undefined {
     const ids = [...[...this.pictures.values()].filter((p) => !p.item.slide).map((p) => p.item.id), ...this.boxes.keys()].reverse();
     return ids.find((id) => {
@@ -493,11 +500,11 @@ export class Canvas {
     this.drawGroup();
   }
 
-  private drawGroup(lasso?: number[]) {
+  private drawGroup(area?: Box) {
     const frame = this.groupBounds();
     this.overlay.replaceChildren(
       ...(frame ? [svg("rect", { class: "ink-selection group", x: frame.x - 8, y: frame.y - 8, width: frame.w + 16, height: frame.h + 16, rx: 6 })] : []),
-      ...(lasso ? [svg("polygon", { class: "lasso", points: lasso.join(" ") })] : []),
+      ...(area ? [svg("rect", { class: "select-area", x: area.x, y: area.y, width: area.w, height: area.h })] : []),
     );
   }
 
@@ -508,22 +515,26 @@ export class Canvas {
     this.setGroup([...this.inkItems.map((item) => item.id), ...this.boxes.keys(), ...this.pictures.keys()]);
   }
 
-  /** Draws a loop round things, or drags a rectangle over them, to pick them. */
-  private lasso(event: PointerEvent) {
-    const pts = [...this.point(event)];
+  /** Drags a rectangle over things to pick them: everything whose middle is inside. */
+  private selectArea(event: PointerEvent) {
+    const [x0, y0] = this.point(event);
+    let area: Box = { x: x0, y: y0, w: 0, h: 0 };
     const el = this.world;
     el.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
-      pts.push(...this.point(e));
-      this.drawGroup(pts);
+      const [x, y] = this.point(e);
+      area = { x: Math.min(x0, x), y: Math.min(y0, y), w: Math.abs(x - x0), h: Math.abs(y - y0) };
+      this.drawGroup(area);
     };
     const up = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
-      if (pts.length < 6) return this.drawGroup();
-      const inside = lassoTest(pts);
-      const centre = (b: Box) => inside(b.x + b.w / 2, b.y + b.h / 2);
+      if (area.w < 3 && area.h < 3) return this.drawGroup();
+      const centre = (b: Box) => {
+        const [cx, cy] = [b.x + b.w / 2, b.y + b.h / 2];
+        return cx >= area.x && cx <= area.x + area.w && cy >= area.y && cy <= area.y + area.h;
+      };
       const byId = new Map(this.inkItems.map((item) => [item.id, item]));
       this.setGroup([
         ...this.inkItems.filter((item) => centre(bounds(item, byId))).map((item) => item.id),

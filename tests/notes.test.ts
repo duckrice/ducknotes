@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
 import { TextSelection } from "prosemirror-state";
-import { arrowHead, edgePoint, hits, lassoTest, lineEnds, moved, movedTogether, smoothPath, type Item, type Shape } from "../src/geometry";
+import { arrowHead, edgePoint, hits, lineEnds, moved, movedTogether, smoothPath, type Item, type Shape } from "../src/geometry";
 import { newPageFile, pageText, safeName } from "../src/store";
 import { createState, insertTable, normaliseUrl, sizeAt, stepSize, toggleCheck, toggleList } from "../src/editor";
 import { emptyDoc, schema } from "../src/schema";
@@ -190,21 +190,7 @@ describe("typing", () => {
   });
 });
 
-describe("the lasso", () => {
-  it("picks what is inside the loop drawn", () => {
-    // An L-shaped loop: the notch at the top right is outside.
-    const inside = lassoTest([0, 0, 50, 0, 50, 50, 100, 50, 100, 100, 0, 100]);
-    expect(inside(25, 25)).toBe(true);
-    expect(inside(75, 75)).toBe(true);
-    expect(inside(75, 25)).toBe(false);
-  });
-
-  it("takes a quick diagonal drag as a rectangle", () => {
-    const inside = lassoTest([0, 0, 50, 51, 100, 100]);
-    expect(inside(90, 10)).toBe(true);
-    expect(inside(110, 10)).toBe(false);
-  });
-
+describe("picking several things", () => {
   it("moves things together, keeping arrows tied to shapes that move with them", () => {
     const items: Item[] = [
       { t: "rect", id: "a", c: "#000", x: 0, y: 0, w: 100, h: 50 },

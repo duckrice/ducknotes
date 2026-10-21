@@ -156,27 +156,6 @@ export function movedTogether(items: Item[], ids: Set<string>, dx: number, dy: n
   });
 }
 
-/** A lasso as a test for points: inside the loop drawn, or, for a loop drawn as a
- * quick diagonal drag (hardly any area), inside the rectangle it spans. */
-export function lassoTest(pts: number[]): (x: number, y: number) => boolean {
-  const xs = pts.filter((_, i) => i % 2 === 0);
-  const ys = pts.filter((_, i) => i % 2 === 1);
-  const [left, right, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  let area = 0;
-  for (let i = 0; i < xs.length; i++) {
-    const j = (i + 1) % xs.length;
-    area += xs[i] * ys[j] - xs[j] * ys[i];
-  }
-  if (Math.abs(area) / 2 < 0.3 * (right - left) * (bottom - top)) return (x, y) => x >= left && x <= right && y >= top && y <= bottom;
-  return (x, y) => {
-    let inside = false;
-    for (let i = 0, j = xs.length - 1; i < xs.length; j = i++) {
-      if (ys[i] > y !== ys[j] > y && x < ((xs[j] - xs[i]) * (y - ys[i])) / (ys[j] - ys[i]) + xs[i]) inside = !inside;
-    }
-    return inside;
-  };
-}
-
 /** The arrowhead at the end of a line from (x1, y1) to (x2, y2), as polygon points. */
 export function arrowHead(x1: number, y1: number, x2: number, y2: number, width: number): string {
   const angle = Math.atan2(y2 - y1, x2 - x1);
