@@ -264,9 +264,27 @@ async function newPage() {
   }
 }
 
+/**
+ * Prints the open page, or saves it as a PDF (choose "Microsoft Print to PDF"): only the page,
+ * at its own size, made smaller if it's wider than the paper.
+ */
+async function printPage() {
+  if (!current) return;
+  await flush();
+  // No text cursor on the paper.
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  const world = current.canvas.world;
+  // About the width of A4 between its margins, in CSS pixels.
+  const paper = 700;
+  const wide = Math.max(...[...world.querySelectorAll<HTMLElement>(".box, .picture")].map((el) => el.offsetLeft + el.offsetWidth), 640);
+  document.documentElement.style.setProperty("--print-zoom", String(Math.min(1, paper / wide)));
+  window.print();
+}
+
 function pageMenu(info: PageInfo): MenuItem[] {
   const others = notebooks.filter((name) => name !== info.notebook);
   return [
+    { label: "Print or save as PDF… (Ctrl+P)", action: () => void openPage(info).then(printPage) },
     { label: "Move to", items: others.map((name) => ({ label: name, action: () => void movePageTo(info, name) })) },
     { label: "Delete", danger: true, action: () => void deletePage(info) },
   ];
@@ -482,6 +500,7 @@ window.addEventListener("keydown", (event) => {
       search.select();
     } else if (key === "k" && !event.shiftKey && canvas?.active?.view.hasFocus()) toolbar.editLink();
     else if (key === "s") void flush();
+    else if (key === "p" && current) void printPage();
     else if (key === "a" && canvas && pen.tool === "select" && !isTyping(event.target)) canvas.selectAll();
     else if (canvas && !isTyping(event.target) && (key === "z" || key === "y")) {
       if (key === "y" || event.shiftKey) canvas.redo();

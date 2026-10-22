@@ -1191,3 +1191,53 @@ body {
     grid-template-columns: 170px 210px 1fr;
   }
 }
+
+/* Printing (Ctrl+P): only the page, with nothing of the window around it. */
+@media print {
+  #app {
+    display: block;
+    height: auto;
+  }
+
+  .notebooks,
+  .pages,
+  .toolbar,
+  .status,
+  .toast,
+  .update-bar,
+  .box-bar,
+  .box-grip,
+  .picture-handle,
+  .ink-selection,
+  .ink-handle {
+    display: none !important;
+  }
+
+  html,
+  body,
+  .page-area,
+  .canvas-host,
+  .canvas-scroll {
+    background: #ffffff !important;
+  }
+
+  .page-area,
+  .canvas-host,
+  .canvas-scroll {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .world {
+    zoom: var(--print-zoom, 1) !important;
+  }
+
+  .box,
+  .box.chosen,
+  .picture.chosen img {
+    border-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+}

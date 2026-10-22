@@ -93,6 +93,7 @@ async function session(port, run) {
     errors,
     ipc,
     child,
+    send,
     async evaluate(expression) {
       const { result } = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
       if (result?.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? "evaluate failed");
@@ -489,6 +490,13 @@ await session(9473, async (app) => {
   await app.mouse("mouseReleased", px, py - 160, { modifiers: 2 });
   const top = await app.evaluate(`document.querySelector(".canvas-scroll").scrollTop`);
   check("Ctrl+drag moves the view instead of picking", top > 400 && (await app.count(".ink-selection.group")) === groupsBefore, `scrollTop ${top}`);
+  // Printing shows only the page: no lists, no toolbar; the PDF keeps the slides and the text.
+  await app.send("Emulation.setEmulatedMedia", { media: "print" });
+  const printed = await app.evaluate(`["notebooks", "pages", "toolbar"].map((c) => getComputedStyle(document.querySelector("." + c)).display).join() + "|" + getComputedStyle(document.querySelector(".world")).display`);
+  check("printing leaves out everything but the page", printed === "none,none,none|block", printed);
+  const pdf = await app.send("Page.printToPDF", { printBackground: true });
+  check("and makes a PDF of it", (pdf.result?.data?.length ?? 0) > 5000, String(pdf.result?.data?.length));
+  await app.send("Emulation.setEmulatedMedia", { media: "" });
   check("no errors with slides and picking", app.errors.length === 0, app.errors.join("; "));
 });
 
