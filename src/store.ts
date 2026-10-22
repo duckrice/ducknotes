@@ -21,6 +21,8 @@ export interface PageFile {
   modified: number;
   paper: Paper;
   items: PageItem[];
+  /** The section of the notebook the page is filed under, as OneNote's section tabs; none if unset. */
+  section?: string;
 }
 
 export interface PageInfo {
@@ -32,6 +34,7 @@ export interface PageInfo {
   modified: number;
   /** All the words on the page, for searching. */
   text: string;
+  section?: string;
 }
 
 const MEDIA = ".media";
@@ -84,7 +87,7 @@ export async function listPages(notebook: string): Promise<PageInfo[]> {
     files.map(async (file): Promise<PageInfo | null> => {
       try {
         const page = await readPage(notebook, file);
-        return { notebook, file, title: page.title, created: page.created, modified: page.modified, text: pageText(page.title, page.items) };
+        return { notebook, file, title: page.title, created: page.created, modified: page.modified, text: pageText(page.title, page.items), section: page.section };
       } catch (error) {
         console.warn(`Skipping ${notebook}/${file}`, error);
         return null;
@@ -96,7 +99,7 @@ export async function listPages(notebook: string): Promise<PageInfo[]> {
 
 export async function readPage(notebook: string, file: string): Promise<PageFile> {
   const page = JSON.parse(await invoke<string>("read_text", { path: `${notebook}/${file}` })) as Partial<PageFile>;
-  return { title: page.title ?? "", created: page.created ?? 0, modified: page.modified ?? 0, paper: page.paper ?? "plain", items: page.items ?? [] };
+  return { title: page.title ?? "", created: page.created ?? 0, modified: page.modified ?? 0, paper: page.paper ?? "plain", items: page.items ?? [], section: typeof page.section === "string" && page.section ? page.section : undefined };
 }
 
 export function writePage(notebook: string, file: string, page: PageFile): Promise<void> {
@@ -124,6 +127,11 @@ export async function createPage(notebook: string, title = ""): Promise<PageInfo
   const now = Date.now();
   await writePage(notebook, file, { title, created: now, modified: now, paper: "plain", items: [] });
   return { notebook, file, title, created: now, modified: now, text: title };
+}
+
+/** Pages in the order the list shows them: those in no section first, then each section A–Z, oldest first within. */
+export function bySection(pages: PageInfo[]): PageInfo[] {
+  return [...pages].sort((a, b) => (a.section ?? "").localeCompare(b.section ?? "", undefined, { sensitivity: "base", numeric: true }) || a.created - b.created);
 }
 
 export function movePage(page: PageInfo, notebook: string): Promise<void> {

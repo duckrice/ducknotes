@@ -1294,3 +1294,17 @@ body {
 .tag-chip:hover {
   color: var(--text);
 }
+
+/* A section's name over its pages; the first group (no section) has none. */
+.section-heading {
+  padding: 10px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-heading:empty {
+  display: none;
+}

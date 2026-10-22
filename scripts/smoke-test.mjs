@@ -397,6 +397,14 @@ await session(9472, async (app) => {
   check("its drawing", (await app.count(".ink g[data-id]")) === 4, String(await app.count(".ink g[data-id]")));
   check("its pictures", await app.waitFor(`[...document.querySelectorAll(".picture img")].filter((img) => img.naturalWidth === 40).length === 2`));
   check("and its lined paper", (await app.evaluate(`document.querySelector(".world").dataset.paper`)) === "lines");
+  // Right-click → Section → New section… files the page under a heading in the list.
+  const pick = (label) => app.evaluate(`[...document.querySelectorAll(".menu .menu-item")].find((b) => b.textContent.startsWith(${JSON.stringify(label)}))?.click() ?? "none"`);
+  await app.evaluate(`document.querySelector(".pages-list .page-item.selected").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 200 }))`);
+  await pick("Section");
+  await pick("New section");
+  await app.evaluate(`(() => { const input = document.querySelector(".dialog input"); input.value = "Week 1"; input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
+  check("a page can be filed under a section", await app.waitFor(`document.querySelector(".pages-list .section-heading")?.textContent === "Week 1"`));
+  check("which is saved with the page", await app.waitFor(`true`) && notebookFiles("My notebook").some((file) => readNote("My notebook", file).section === "Week 1"));
   check("no errors after starting again", app.errors.length === 0, app.errors.join("; "));
 });
 

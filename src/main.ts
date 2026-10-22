@@ -8,6 +8,7 @@ import { h, isTyping } from "./dom";
 import { icon } from "./icons";
 import { pen } from "./ink";
 import {
+  bySection,
   createNotebook,
   createPage,
   listNotebooks,
@@ -146,8 +147,9 @@ function showPages() {
     pageList.replaceChildren(h("li", { class: "list-empty" }, query ? "Nothing found." : "No pages yet."));
     return;
   }
+  let section: string | undefined;
   pageList.replaceChildren(
-    ...found.map((info) => {
+    ...(query ? found : bySection(found)).flatMap((info) => {
       const active = current?.info === info;
       const item = h(
         "li",
@@ -163,7 +165,9 @@ function showPages() {
         event.preventDefault();
         menu(item, pageMenu(info));
       });
-      return item;
+      if (query || info.section === section) return [item];
+      section = info.section;
+      return [h("li", { class: "section-heading", role: "presentation" }, section ?? ""), item];
     }),
   );
 }
@@ -306,8 +310,28 @@ function pageMenu(info: PageInfo): MenuItem[] {
   return [
     { label: "Print or save as PDF… (Ctrl+P)", action: () => void openPage(info).then(printPage) },
     { label: "Move to", items: others.map((name) => ({ label: name, action: () => void movePageTo(info, name) })) },
+    {
+      label: "Section",
+      items: [
+        ...[...new Set(pages.filter((p) => p.notebook === info.notebook && p.section).map((p) => p.section!))].sort().map((name) => ({ label: name, action: () => void setSection(info, name) })),
+        { label: "New section…", action: () => void askName("New section", "", "Make section").then((name) => (name?.trim() ? setSection(info, name.trim()) : undefined)) },
+        ...(info.section ? [{ label: "No section", action: () => void setSection(info, undefined) }] : []),
+      ],
+    },
     { label: "Delete", danger: true, action: () => void deletePage(info) },
   ];
+}
+
+/** Files a page under a section of its notebook, or under none. */
+async function setSection(info: PageInfo, section: string | undefined) {
+  info.section = section;
+  try {
+    if (current?.info === info) await save();
+    else await writePage(info.notebook, info.file, { ...(await readPage(info.notebook, info.file)), section });
+    refresh();
+  } catch (error) {
+    failed("The page could not be moved to the section", error);
+  }
 }
 
 async function movePageTo(info: PageInfo, to: string) {
@@ -431,7 +455,7 @@ function save(): Promise<void> {
   saveTimer = 0;
   const open = current;
   if (!open) return saving;
-  const page = { ...open.canvas.toPage(), modified: Date.now() };
+  const page = { ...open.canvas.toPage(), modified: Date.now(), section: open.info.section };
   open.info.title = page.title;
   open.info.modified = page.modified;
   open.info.text = pageText(page.title, page.items);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
 import { AllSelection, TextSelection } from "prosemirror-state";
 import { arrowHead, edgePoint, hits, lineEnds, moved, movedTogether, smoothPath, type Item, type Shape } from "../src/geometry";
-import { newPageFile, pageText, safeName } from "../src/store";
+import { bySection, newPageFile, pageText, safeName } from "../src/store";
 import { createState, insertTable, tagAt, toggleTag, normaliseUrl, sizeAt, stepSize, toggleCheck, toggleList } from "../src/editor";
 import { emptyDoc, schema } from "../src/schema";
 
@@ -216,5 +216,13 @@ describe("tags", () => {
     expect(text).toContain("#important Mitosis has four phases");
     toggleTag("important")(state, (tr) => (state = state.apply(tr)));
     expect(state.doc.firstChild!.attrs.tag).toBe(null);
+  });
+});
+
+describe("sections", () => {
+  it("list pages in no section first, then each section A to Z, oldest first", () => {
+    const page = (file: string, created: number, section?: string) => ({ notebook: "N", file, title: file, created, modified: created, text: "", section });
+    const order = bySection([page("c", 3, "Week 2"), page("a", 1, "Week 1"), page("x", 5), page("b", 2, "Week 1"), page("y", 4)]).map((p) => p.file);
+    expect(order).toEqual(["y", "x", "a", "b", "c"]);
   });
 });
