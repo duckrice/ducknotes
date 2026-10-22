@@ -41,6 +41,26 @@ const notebookList = h("ul", { class: "list", role: "listbox", "aria-label": "No
 const pageList = h("ul", { class: "list pages-list", role: "listbox", "aria-label": "Pages" });
 const search = h("input", { type: "search", class: "search", placeholder: "Search all notes (Ctrl+E)", "aria-label": "Search all notes" }) as HTMLInputElement;
 const pagesHeading = h("h2", { class: "column-title" });
+/** Every tagged line in all notebooks, found by searching for its tag. */
+const tagChips = h(
+  "div",
+  { class: "tag-chips" },
+  ...([
+    ["★ Important", "#important"],
+    ["? Questions", "#question"],
+    ["E Exam", "#exam"],
+  ] as const).map(([label, word]) =>
+    h("button", {
+      type: "button",
+      class: "tag-chip",
+      title: `Pages with lines tagged ${word.slice(1)}`,
+      onclick: () => {
+        search.value = word;
+        search.dispatchEvent(new Event("input"));
+      },
+    }, label),
+  ),
+);
 const newPageButton = h("button", { type: "button", class: "btn primary small new-page", title: "New page (Ctrl+N)", html: `${icon("plus", 16)}<span>Page</span>` });
 const status = h("span", { class: "status-text", role: "status" });
 const emptyState = h("div", { class: "empty-state" });
@@ -75,7 +95,7 @@ app.append(
     ),
     notebookList,
   ),
-  h("aside", { class: "column pages" }, search, h("div", { class: "column-head" }, pagesHeading, newPageButton), pageList),
+  h("aside", { class: "column pages" }, search, tagChips, h("div", { class: "column-head" }, pagesHeading, newPageButton), pageList),
   h("main", { class: "page-area" }, toolbar.el, canvasHost, h("div", { class: "status" }, status, toolbar.zoomBar)),
   pictureInput,
   slidesInput,

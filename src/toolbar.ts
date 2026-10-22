@@ -7,7 +7,7 @@ import { addColumnAfter, addRowAfter, deleteColumn, deleteRow, deleteTable, isIn
 import type { EditorView } from "prosemirror-view";
 import { h } from "./dom";
 import { insertEquation } from "./equation";
-import { insertTable, normaliseUrl, setHeading, stepSize, setLink, toggleCheck, toggleColor, toggleList } from "./editor";
+import { insertTable, normaliseUrl, setHeading, stepSize, setLink, tagAt, toggleCheck, toggleColor, toggleList, toggleTag } from "./editor";
 import { icon, type IconName } from "./icons";
 import { schema } from "./schema";
 import { toggleMark } from "prosemirror-commands";
@@ -307,6 +307,9 @@ export function createToolbar(hooks: ToolbarHooks) {
         button("bullets", "Bullets (Ctrl+.)", () => run(toggleList("bullet")), inList("bullet")),
         button("numbers", "Numbering (Ctrl+/)", () => run(toggleList("number")), inList("number")),
         button("checklist", "Checklist (Ctrl+1)", () => run(toggleCheck), inList("check")),
+        button("important", "Tag as important (Ctrl+2)", () => run(toggleTag("important")), (state) => tagAt(state) === "important"),
+        button("question", "Tag as a question (Ctrl+3)", () => run(toggleTag("question")), (state) => tagAt(state) === "question"),
+        button("exam", "Tag for the exam (Ctrl+4)", () => run(toggleTag("exam")), (state) => tagAt(state) === "exam"),
       ),
       h(
         "div",

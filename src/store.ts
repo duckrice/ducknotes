@@ -47,7 +47,9 @@ export function safeName(name: string): string {
 /** The words of a page, for searching: its title and every bit of text, equations included. */
 export function pageText(title: string, items: PageItem[]): string {
   const parts = [title];
-  const walk = (node: { text?: string; attrs?: { latex?: string }; content?: unknown[] }) => {
+  const walk = (node: { text?: string; attrs?: { latex?: string; tag?: string | null }; content?: unknown[] }) => {
+    // Tagged lines can be found by searching #important, #question or #exam.
+    if (node.attrs?.tag) parts.push(`#${node.attrs.tag}`);
     if (node.text) parts.push(node.text);
     if (node.attrs?.latex) parts.push(node.attrs.latex);
     for (const child of node.content ?? []) walk(child as typeof node);

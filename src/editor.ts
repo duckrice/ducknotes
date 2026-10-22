@@ -91,6 +91,35 @@ export const toggleCheck: Command = (state, dispatch) => {
   return true;
 };
 
+export const TAGS = ["important", "question", "exam"] as const;
+export type Tag = (typeof TAGS)[number];
+
+/** Tags the lines in the selection (the same tag again takes it off), as OneNote's Ctrl+2 and Ctrl+3. */
+export function toggleTag(tag: Tag): Command {
+  return (state, dispatch) => {
+    const { from, to } = state.selection;
+    const lines: { pos: number; node: import("prosemirror-model").Node }[] = [];
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type === n.paragraph) lines.push({ pos, node });
+    });
+    if (!lines.length) return false;
+    const off = lines.every((l) => l.node.attrs.tag === tag);
+    if (dispatch) {
+      const tr = state.tr;
+      for (const { pos, node } of lines) tr.setNodeMarkup(pos, undefined, { ...node.attrs, tag: off ? null : tag });
+      dispatch(tr);
+    }
+    return true;
+  };
+}
+
+/** The tag of the line at the cursor. */
+export function tagAt(state: import("prosemirror-state").EditorState): string | null {
+  const { $from } = state.selection;
+  for (let d = $from.depth; d > 0; d--) if ($from.node(d).type === n.paragraph) return $from.node(d).attrs.tag;
+  return null;
+}
+
 export function setHeading(level: number): Command {
   return level ? setBlockType(n.heading, { level }) : setBlockType(n.paragraph);
 }
@@ -389,6 +418,9 @@ export function createState(doc: Node): EditorState {
         "Mod-.": toggleList("bullet"),
         "Mod-/": toggleList("number"),
         "Mod-1": toggleCheck,
+        "Mod-2": toggleTag("important"),
+        "Mod-3": toggleTag("question"),
+        "Mod-4": toggleTag("exam"),
         "Mod-Shift-1": setHeading(1),
         "Mod-Shift-2": setHeading(2),
         "Mod-Shift-3": setHeading(3),

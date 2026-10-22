@@ -490,6 +490,15 @@ await session(9473, async (app) => {
   await app.mouse("mouseReleased", px, py - 160, { modifiers: 2 });
   const top = await app.evaluate(`document.querySelector(".canvas-scroll").scrollTop`);
   check("Ctrl+drag moves the view instead of picking", top > 400 && (await app.count(".ink-selection.group")) === groupsBefore, `scrollTop ${top}`);
+  // Tags: Ctrl+2 marks the line important; the Important button under search finds the page.
+  await app.evaluate(`(() => { const v = window.__ducknotes.canvas().focusText(); })()`);
+  await app.key("2", 50, 2);
+  check("Ctrl+2 tags the line as important", await app.waitFor(`!!document.querySelector('.box p[data-tag="important"]')`, 3000));
+  await app.saved();
+  await app.clickOn(".tag-chip");
+  check("and the Important button finds the page", await app.waitFor(`document.querySelector(".search").value === "#important" && [...document.querySelectorAll(".pages-list .page-item")].some((li) => li.textContent.includes("Lecture 2"))`, 5000));
+  await app.evaluate(`(() => { const s = document.querySelector(".search"); s.value = ""; s.dispatchEvent(new Event("input")); })()`);
+
   // Printing shows only the page: no lists, no toolbar; the PDF keeps the slides and the text.
   await app.send("Emulation.setEmulatedMedia", { media: "print" });
   const printed = await app.evaluate(`["notebooks", "pages", "toolbar"].map((c) => getComputedStyle(document.querySelector("." + c)).display).join() + "|" + getComputedStyle(document.querySelector(".world")).display`);

@@ -18,6 +18,7 @@ A free note-taking app for Windows, made for lectures. It works like OneNote, bu
 - **Equations.** Typeset maths in a LaTeX-like shorthand, with a preview and buttons for the common shapes.
 - **Paper.** Plain, lined or squared.
 - **Search.** Ctrl+E searches every notebook, and the matches are marked on the page.
+- **Tags.** Mark lines Important (Ctrl+2), Question (Ctrl+3) or Exam (Ctrl+4), as in OneNote; the buttons under the search box list every page with them.
 - **Print or save as PDF.** Ctrl+P prints the page on its own (choose "Microsoft Print to PDF" to save a PDF); also in the page's right-click menu.
 - **Nothing lost.** Deleting moves things to `Documents\DuckNotes\.trash`, with an Undo.
 
@@ -28,6 +29,7 @@ A free note-taking app for Windows, made for lectures. It works like OneNote, bu
 | Ctrl+N | New page |
 | Ctrl+E | Search all notes |
 | Ctrl+P | Print the page, or save it as PDF |
+| Ctrl+2 / 3 / 4 | Tag: important / question / exam |
 | Ctrl+Z / Ctrl+Y | Undo / redo (typing, or drawing and moving things) |
 | Ctrl+B / I / U | Bold / italic / underline |
 | Ctrl+- | Strikethrough |

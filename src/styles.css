@@ -1241,3 +1241,56 @@ body {
     outline: none !important;
   }
 }
+
+/* Tags, as in OneNote: a mark before the tagged line. */
+.note p.tagged {
+  position: relative;
+}
+
+.note p.tagged::before {
+  position: absolute;
+  left: -20px;
+  top: 0.15em;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: #ffffff;
+  font: 700 10px/15px "Segoe UI", sans-serif;
+  text-align: center;
+}
+
+.note p[data-tag="important"]::before {
+  content: "★";
+  background: #f59e0b;
+}
+
+.note p[data-tag="question"]::before {
+  content: "?";
+  background: #8b5cf6;
+}
+
+.note p[data-tag="exam"]::before {
+  content: "E";
+  background: #0f766e;
+}
+
+.tag-chips {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 0;
+}
+
+.tag-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-chip:hover {
+  color: var(--text);
+}

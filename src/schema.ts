@@ -14,8 +14,10 @@ const nodes: Record<string, NodeSpec> = {
   paragraph: {
     group: "block",
     content: "inline*",
-    parseDOM: [{ tag: "p" }],
-    toDOM: () => ["p", 0],
+    /** A tag, as in OneNote: "important", "question" or "exam". */
+    attrs: { tag: { default: null } },
+    parseDOM: [{ tag: "p", getAttrs: (dom) => ({ tag: (dom as HTMLElement).getAttribute("data-tag") || null }) }],
+    toDOM: (node) => (node.attrs.tag ? ["p", { "data-tag": node.attrs.tag, class: "tagged" }, 0] : ["p", 0]),
   },
   heading: {
     group: "block",

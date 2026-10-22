@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "prosemirror-view";
-import { TextSelection } from "prosemirror-state";
+import { AllSelection, TextSelection } from "prosemirror-state";
 import { arrowHead, edgePoint, hits, lineEnds, moved, movedTogether, smoothPath, type Item, type Shape } from "../src/geometry";
 import { newPageFile, pageText, safeName } from "../src/store";
-import { createState, insertTable, normaliseUrl, sizeAt, stepSize, toggleCheck, toggleList } from "../src/editor";
+import { createState, insertTable, tagAt, toggleTag, normaliseUrl, sizeAt, stepSize, toggleCheck, toggleList } from "../src/editor";
 import { emptyDoc, schema } from "../src/schema";
 
 describe("drawing geometry", () => {
@@ -202,5 +202,19 @@ describe("picking several things", () => {
     expect(both[1]).toBe(items[1]);
     // Tied to the shape that moved with it; let go of the one left behind.
     expect(both[2]).toMatchObject({ from: "a", to: undefined });
+  });
+});
+
+describe("tags", () => {
+  it("tag lines (the same tag again takes it off), and are found by searching #tag", () => {
+    let state = createState(schema.node("doc", null, [schema.node("paragraph", null, [schema.text("Mitosis has four phases")])]));
+    state = state.apply(state.tr.setSelection(new AllSelection(state.doc)));
+    toggleTag("important")(state, (tr) => (state = state.apply(tr)));
+    expect(state.doc.firstChild!.attrs.tag).toBe("important");
+    expect(tagAt(state.apply(state.tr.setSelection(TextSelection.create(state.doc, 3))))).toBe("important");
+    const text = pageText("Biology", [{ t: "box", id: "b", x: 0, y: 0, w: 100, doc: state.doc.toJSON() }]);
+    expect(text).toContain("#important Mitosis has four phases");
+    toggleTag("important")(state, (tr) => (state = state.apply(tr)));
+    expect(state.doc.firstChild!.attrs.tag).toBe(null);
   });
 });
