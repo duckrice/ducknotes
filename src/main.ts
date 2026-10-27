@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { setSpellChecker } from "./spelling";
 import { showSpellMenu } from "./spellmenu";
 import { windowsSpelling } from "./store";
+import { cardsOf, practise } from "./flashcards";
 import { Canvas } from "./canvas";
 import { h, isTyping } from "./dom";
 import { icon } from "./icons";
@@ -64,7 +65,21 @@ const tagChips = h(
       },
     }, label),
   ),
+  h("button", { type: "button", class: "tag-chip", title: "Practise this notebook's questions as flashcards (lines tagged Question with Ctrl+3; the answer is the lines under them)", onclick: () => void practiseNotebook() }, "▶ Practise"),
 );
+
+/** Flashcards from every page of the open notebook. */
+async function practiseNotebook() {
+  await flush();
+  const mine = pages.filter((p) => p.notebook === notebook);
+  const files = await Promise.all(mine.map((p) => readPage(p.notebook, p.file)));
+  const cards = files.flatMap((f) => cardsOf(f.title, f.items));
+  if (!cards.length) {
+    status.textContent = "No questions to practise yet: tag a line as a question with Ctrl+3, and write its answer under it.";
+    return;
+  }
+  practise(cards);
+}
 const newPageButton = h("button", { type: "button", class: "btn primary small new-page", title: "New page (Ctrl+N)", html: `${icon("plus", 16)}<span>Page</span>` });
 const status = h("span", { class: "status-text", role: "status" });
 const emptyState = h("div", { class: "empty-state" });

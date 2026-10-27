@@ -241,6 +241,23 @@ await session(9471, async (app) => {
   await app.evaluate(`[...document.querySelectorAll(".spell-menu .spell-suggestion")].find((b) => b.textContent === "mitochondria").click()`);
   check("and picking one corrects the word", (await app.evaluate(`document.querySelector(".box .note").textContent.includes("mitochondria") && !document.querySelector(".box .spell-error")`)) === true);
   await app.key("End", 35);
+
+  // Flashcards: a line tagged Question (Ctrl+3) with its answer under it.
+  await app.type("\nWhat is DNA?");
+  await app.key("3", 51, 2);
+  await app.type("\nThe code of life");
+  check("Ctrl+3 tags the line as a question", (await app.count(`.box p[data-tag="question"]`)) === 1);
+  await app.evaluate(`[...document.querySelectorAll(".tag-chip")].find((b) => b.textContent.includes("Practise")).click()`);
+  check("Practise shows the question as a card", await app.waitFor(`document.querySelector(".flashcards .card-front")?.textContent === "What is DNA?"`, 5000));
+  check("with the answer hidden", await app.evaluate(`document.querySelector(".flashcards .card-back").hidden`));
+  await app.key(" ", 32);
+  check("Space shows the answer", (await app.evaluate(`!document.querySelector(".flashcards .card-back").hidden && document.querySelector(".flashcards .card-back").textContent`)) === "The code of life");
+  await app.key("2", 50);
+  check("and 'knew it' counts it", (await app.evaluate(`document.querySelector(".flashcards .card-front").textContent`)) === "Done: you knew 1 of 1 the first time.");
+  await app.key("Escape", 27);
+  check("Escape closes it", (await app.count(".flashcards")) === 0);
+  // The card's two lines go again, so the box is as the later checks expect.
+  await app.evaluate(`(() => { const v = window.__ducknotes.view(); let from = -1, to = -1; v.state.doc.forEach((n, pos) => { if (n.attrs.tag === "question") from = pos; else if (from >= 0 && to < 0) to = pos + n.nodeSize; }); v.dispatch(v.state.tr.delete(from, to)); })()`);
   const tick = await app.evaluate(`(() => { const r = document.querySelector(".box li.task").getBoundingClientRect(); return [r.left - 14, r.top + 11]; })()`);
   await app.click(tick[0], tick[1]);
   check("clicking a box ticks it", (await app.count(`.box li.task[data-checked="true"]`)) === 1);

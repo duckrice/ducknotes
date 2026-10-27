@@ -5,6 +5,7 @@ import { arrowHead, edgePoint, hits, lineEnds, moved, movedTogether, smoothPath,
 import { bySection, newPageFile, pageText, safeName } from "../src/store";
 import { createState, insertTable, tagAt, toggleTag, normaliseUrl, sizeAt, stepSize, toggleCheck, toggleList } from "../src/editor";
 import { emptyDoc, schema } from "../src/schema";
+import { cardsOf } from "../src/flashcards";
 
 describe("drawing geometry", () => {
   const box: Shape = { t: "rect", id: "a", c: "#000", x: 100, y: 100, w: 100, h: 50 };
@@ -224,5 +225,22 @@ describe("sections", () => {
     const page = (file: string, created: number, section?: string) => ({ notebook: "N", file, title: file, created, modified: created, text: "", section });
     const order = bySection([page("c", 3, "Week 2"), page("a", 1, "Week 1"), page("x", 5), page("b", 2, "Week 1"), page("y", 4)]).map((p) => p.file);
     expect(order).toEqual(["y", "x", "a", "b", "c"]);
+  });
+});
+
+describe("flashcards", () => {
+  const p = (text: string, tag: string | null = null) => ({ type: "paragraph", attrs: { tag }, content: text ? [{ type: "text", text }] : [] });
+  const box = (...content: object[]) => ({ t: "box", doc: { type: "doc", content } }) as never;
+  it("a question line's answer is the lines under it, up to the next tagged line or heading", () => {
+    const items = [
+      box(p("What makes ATP?", "question"), p("The mitochondria"), p("in every cell"), p("Write this down", "important"), p("ignored")),
+      box(p("Speed of light? About 300 000 km/s", "question"), { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Next" }] }),
+      box(p("Lonely question", "question")),
+    ];
+    expect(cardsOf("Biology", items)).toEqual([
+      { front: "What makes ATP?", back: "The mitochondria\nin every cell", page: "Biology" },
+      { front: "Speed of light?", back: "About 300 000 km/s", page: "Biology" },
+      { front: "Lonely question", back: "", page: "Biology" },
+    ]);
   });
 });
