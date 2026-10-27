@@ -18,6 +18,7 @@ import { editEquation, insertEquation } from "./equation";
 import { ImageView } from "./imageview";
 import { MathView } from "./mathview";
 import { schema } from "./schema";
+import { spellingPlugin } from "./spelling";
 import { openUrl } from "./store";
 
 const n = schema.nodes;
@@ -403,6 +404,7 @@ export function createState(doc: Node): EditorState {
     plugins: [
       rules(),
       history(),
+      spellingPlugin(),
       keymap({
         "Mod-z": undo,
         "Mod-y": redo,
@@ -467,7 +469,7 @@ export function createView(host: HTMLElement, state: EditorState, hooks: EditorH
   const pictures = (list: FileList | undefined | null) => [...(list ?? [])].filter((f) => f.type.startsWith("image/"));
   const view: EditorView = new EditorView(host, {
     state,
-    attributes: { class: "note", spellcheck: "true" },
+    attributes: { class: "note", spellcheck: "false" },
     nodeViews: {
       math: (node, v, getPos) => new MathView(node, v, getPos, (pos) => editEquation(v, pos)),
       image: (node, v, getPos) => new ImageView(node, v, getPos),

@@ -5,6 +5,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod spelling;
+
 use percent_encoding::percent_decode_str;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::Manager;
@@ -182,7 +184,10 @@ pub fn run() {
             make_dir,
             rename_path,
             trash,
-            open_url
+            open_url,
+            spelling::spell_languages,
+            spelling::spell_check,
+            spelling::spell_suggest
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

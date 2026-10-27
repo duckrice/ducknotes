@@ -1,6 +1,6 @@
 [package]
 name = "ducknotes"
-version = "1.4.0"
+version = "1.5.0"
 description = "Notes for lectures and meetings, kept on your own computer"
 authors = ["Duckrice"]
 edition = "2021"
@@ -22,6 +22,10 @@ tauri-plugin-updater = "2"
 percent-encoding = "2"
 # Needed by tauri::generate_context! once plugins have settings in tauri.conf.json.
 serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+# Windows' own spell checker, in every language the user has (Norwegian and English at once).
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "System_UserProfile"] }
 
 [profile.release]
 codegen-units = 1

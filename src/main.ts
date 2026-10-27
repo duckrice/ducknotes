@@ -3,6 +3,9 @@
 
 import "./styles.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { setSpellChecker } from "./spelling";
+import { showSpellMenu } from "./spellmenu";
+import { windowsSpelling } from "./store";
 import { Canvas } from "./canvas";
 import { h, isTyping } from "./dom";
 import { icon } from "./icons";
@@ -606,4 +609,5 @@ async function start() {
 // For the tests, which drive the app from outside.
 Object.assign(window, { __ducknotes: { canvas: () => current?.canvas, view: () => current?.canvas.active?.view, flush, info: () => current?.info, pen } });
 
+setSpellChecker(windowsSpelling, showSpellMenu);
 start().catch((error) => failed("DuckNotes could not start", error));

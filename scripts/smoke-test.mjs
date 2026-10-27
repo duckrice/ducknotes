@@ -228,6 +228,19 @@ await session(9471, async (app) => {
   await app.type("Energy: $E=mc^2$ -> light ");
   check("$…$ makes an equation", (await app.count(".box .math math")) === 1);
   check("-> makes an arrow", (await app.evaluate(`document.querySelector(".box .note").textContent.includes("→ light")`)) === true);
+
+  // Spelling, with Windows' checker: a wrong word gets a red line once the cursor has left it,
+  // and a right-click offers the right one.
+  await app.type("mitochondira ");
+  check("a misspelt word gets a red line", await app.waitFor(`[...document.querySelectorAll(".box .spell-error")].some((s) => s.textContent === "mitochondira")`, 5000));
+  check("words spelt right don't", (await app.evaluate(`[...document.querySelectorAll(".box .spell-error")].map((s) => s.textContent).join()`)) === "mitochondira");
+  const wrong = await app.evaluate(`(() => { const r = [...document.querySelectorAll(".box .spell-error")].find((s) => s.textContent === "mitochondira").getBoundingClientRect(); return [r.left + 10, r.top + r.height / 2]; })()`);
+  await app.mouse("mousePressed", wrong[0], wrong[1], { button: "right", buttons: 2 });
+  await app.mouse("mouseReleased", wrong[0], wrong[1], { button: "right", buttons: 0 });
+  check("right-clicking it offers suggestions", await app.waitFor(`[...document.querySelectorAll(".spell-menu .spell-suggestion")].some((b) => b.textContent === "mitochondria")`, 5000));
+  await app.evaluate(`[...document.querySelectorAll(".spell-menu .spell-suggestion")].find((b) => b.textContent === "mitochondria").click()`);
+  check("and picking one corrects the word", (await app.evaluate(`document.querySelector(".box .note").textContent.includes("mitochondria") && !document.querySelector(".box .spell-error")`)) === true);
+  await app.key("End", 35);
   const tick = await app.evaluate(`(() => { const r = document.querySelector(".box li.task").getBoundingClientRect(); return [r.left - 14, r.top + 11]; })()`);
   await app.click(tick[0], tick[1]);
   check("clicking a box ticks it", (await app.count(`.box li.task[data-checked="true"]`)) === 1);

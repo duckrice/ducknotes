@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "ducknotes"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "percent-encoding",
  "serde_json",
@@ -876,6 +876,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+ "windows",
 ]
 
 [[package]]

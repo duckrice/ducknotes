@@ -71,6 +71,12 @@ export function newPageFile(now = new Date()): string {
   return `${stamp}-${Math.random().toString(36).slice(2, 6)}.json`;
 }
 
+/** Windows' spell checker, in the languages of the user's Windows language list. */
+export const windowsSpelling = {
+  check: (words: string[]) => invoke<boolean[]>("spell_check", { words }),
+  suggest: (word: string) => invoke<string[]>("spell_suggest", { word }),
+};
+
 const listDir = (path: string) => invoke<[string, boolean][]>("list_dir", { path });
 
 export async function listNotebooks(): Promise<string[]> {

@@ -1308,3 +1308,42 @@ body {
 .section-heading:empty {
   display: none;
 }
+
+/* ---- spelling -------------------------------------------------------------------------------- */
+
+.note .spell-error {
+  text-decoration: underline wavy #e11d48;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+}
+
+.spell-menu {
+  min-width: 200px;
+}
+
+.spell-suggestion {
+  font-weight: 600;
+}
+
+.spell-loading {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media print {
+  .note .spell-error {
+    text-decoration: none !important;
+  }
+
+  .spell-menu {
+    display: none !important;
+  }
+}
+
+
+.menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border, #e5e7eb);
+}
