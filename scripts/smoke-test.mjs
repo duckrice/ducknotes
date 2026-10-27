@@ -8,7 +8,7 @@
 //
 // The notes go to a scratch folder (DUCKNOTES_DIR), never to Documents.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,7 @@ async function session(port, run) {
       ...process.env,
       DUCKNOTES_DIR: notesDir,
       DUCKNOTES_TEST_OFFSCREEN: "1",
+      DUCKNOTES_TEST_EXPORT: join(work, "export.docx"),
       DUCKNOTES_MULTI_INSTANCE: "1",
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding`,
       WEBVIEW2_USER_DATA_FOLDER: profile,
@@ -435,6 +436,12 @@ await session(9472, async (app) => {
   await app.evaluate(`(() => { const input = document.querySelector(".dialog input"); input.value = "Week 1"; input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`);
   check("a page can be filed under a section", await app.waitFor(`document.querySelector(".pages-list .section-heading")?.textContent === "Week 1"`));
   check("which is saved with the page", await app.waitFor(`true`) && notebookFiles("My notebook").some((file) => readNote("My notebook", file).section === "Week 1"));
+  // Saving the section as a Word document (tests skip the Save dialog and write to DUCKNOTES_TEST_EXPORT).
+  const exported = join(work, "export.docx");
+  rmSync(exported, { force: true });
+  await app.evaluate(`document.querySelector(".pages-list .page-item.selected").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 200 }))`);
+  await pick("Save section");
+  check("a section can be saved as a Word document", await app.waitFor(`/Saved export\\.docx/.test(document.querySelector(".status-text").textContent)`, 5000) && existsSync(exported) && readFileSync(exported).subarray(0, 2).toString() === "PK", await app.evaluate(`document.querySelector(".status-text").textContent`));
   check("no errors after starting again", app.errors.length === 0, app.errors.join("; "));
 });
 

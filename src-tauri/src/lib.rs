@@ -78,6 +78,27 @@ fn write_bytes(request: Request<'_>) -> Result<(), String> {
     write_atomically(&inside(&path)?, bytes).map_err(|err| format!("Could not save {path}: {err}"))
 }
 
+/// Asks where to save a file made from the notes (Windows' own Save dialog) and writes it there.
+/// The place comes from the dialog, never from the page. Returns the file's name, or None if cancelled.
+#[tauri::command]
+fn save_export(window: tauri::WebviewWindow, request: Request<'_>) -> Result<Option<String>, String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("save_export expects a binary body".into());
+    };
+    let encoded = request.headers().get("x-name").and_then(|value| value.to_str().ok()).unwrap_or("Notes.docx");
+    let name = percent_decode_str(encoded).decode_utf8().map_err(|err| err.to_string())?.into_owned();
+    // Tests say where, instead of a dialog nobody would answer.
+    let path = match std::env::var_os("DUCKNOTES_TEST_EXPORT") {
+        Some(test) => PathBuf::from(test),
+        None => match rfd::FileDialog::new().set_parent(&window).set_file_name(&name).add_filter("Word document", &["docx"]).save_file() {
+            Some(path) => path,
+            None => return Ok(None),
+        },
+    };
+    write_atomically(&path, bytes).map_err(|err| format!("Could not save {}: {err}", path.display()))?;
+    Ok(path.file_name().map(|n| n.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn make_dir(path: String) -> Result<(), String> {
     fs::create_dir_all(inside(&path)?).map_err(|err| format!("Could not make {path}: {err}"))
@@ -181,6 +202,7 @@ pub fn run() {
             read_bytes,
             write_text,
             write_bytes,
+            save_export,
             make_dir,
             rename_path,
             trash,

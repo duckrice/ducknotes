@@ -4,7 +4,7 @@
 // the cursor leaves it, as in Word and OneNote.
 
 import type { Node } from "prosemirror-model";
-import { Plugin, PluginKey, type EditorState, type Transaction } from "prosemirror-state";
+import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 
 export interface SpellChecker {
@@ -293,7 +293,9 @@ export function nextMistake(state: EditorState): Mistake | null {
 export function correct(state: EditorState, mistake: Mistake, replacement: string): Transaction | null {
   if (state.doc.textBetween(mistake.from, mistake.to) !== mistake.word) return null;
   const marks = state.doc.resolve(mistake.from + 1).marks();
-  return state.tr.replaceWith(mistake.from, mistake.to, state.schema.text(replacement, marks));
+  const tr = state.tr.replaceWith(mistake.from, mistake.to, state.schema.text(replacement, marks));
+  // The cursor goes after the word, as in Word, so typing on doesn't replace it.
+  return tr.setSelection(TextSelection.create(tr.doc, mistake.from + replacement.length));
 }
 
 /** Shows the menu for a marked word, as a right-click would (F7). */

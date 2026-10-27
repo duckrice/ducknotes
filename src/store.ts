@@ -177,6 +177,32 @@ export function pictureUrl(src: string): Promise<string> {
   return url;
 }
 
+/** A picture's bytes and size, as PNG, JPEG or GIF (others are turned into PNG), for a Word document. */
+export async function pictureForWord(src: string): Promise<{ bytes: Uint8Array; ext: "png" | "jpeg" | "gif"; w: number; h: number } | null> {
+  try {
+    const blob = await (await fetch(await pictureUrl(src))).blob();
+    const bitmap = await createImageBitmap(blob);
+    const [w, h] = [bitmap.width, bitmap.height];
+    const ext = ({ "image/png": "png", "image/jpeg": "jpeg", "image/gif": "gif" } as const)[blob.type as "image/png"];
+    if (ext) {
+      bitmap.close();
+      return { bytes: new Uint8Array(await blob.arrayBuffer()), ext, w, h };
+    }
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    return { bytes: new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer()), ext: "png", w, h };
+  } catch {
+    // A picture that can't be read is left out.
+    return null;
+  }
+}
+
+/** Saves a file made from the notes where the user picks (Windows' Save dialog); its name, or null if cancelled. */
+export function saveExport(name: string, bytes: Uint8Array): Promise<string | null> {
+  return invoke<string | null>("save_export", bytes, { headers: { "x-name": encodeURIComponent(name) } });
+}
+
 export function openUrl(url: string): Promise<void> {
   return invoke("open_url", { url });
 }

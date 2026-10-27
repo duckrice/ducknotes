@@ -5,7 +5,8 @@ import "./styles.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { setSpellChecker } from "./spelling";
 import { showSpellMenu } from "./spellmenu";
-import { windowsSpelling } from "./store";
+import { pictureForWord, saveExport, windowsSpelling } from "./store";
+import { notesToDocx, picturesIn } from "./docx";
 import { cardsOf, practise } from "./flashcards";
 import { Canvas } from "./canvas";
 import { h, isTyping } from "./dom";
@@ -13,6 +14,7 @@ import { icon } from "./icons";
 import { pen } from "./ink";
 import {
   bySection,
+  safeName,
   createNotebook,
   createPage,
   listNotebooks,
@@ -327,6 +329,10 @@ function pageMenu(info: PageInfo): MenuItem[] {
   const others = notebooks.filter((name) => name !== info.notebook);
   return [
     { label: "Print or save as PDF… (Ctrl+P)", action: () => void openPage(info).then(printPage) },
+    { label: "Save as Word document…", action: () => void saveAsWord([info], info.title || "Untitled page") },
+    ...(info.section
+      ? [{ label: `Save section “${info.section}” as Word document…`, action: () => void saveAsWord(bySection(pages.filter((p) => p.notebook === info.notebook && p.section === info.section)), info.section!) }]
+      : []),
     { label: "Move to", items: others.map((name) => ({ label: name, action: () => void movePageTo(info, name) })) },
     {
       label: "Section",
@@ -338,6 +344,19 @@ function pageMenu(info: PageInfo): MenuItem[] {
     },
     { label: "Delete", danger: true, action: () => void deletePage(info) },
   ];
+}
+
+/** Saves pages as one Word document, each page starting a new page in it. */
+async function saveAsWord(infos: PageInfo[], name: string) {
+  await flush();
+  try {
+    const files = await Promise.all(infos.map((p) => readPage(p.notebook, p.file)));
+    const pictures = new Map(await Promise.all(picturesIn(files).map(async (src) => [src, await pictureForWord(src)] as const)));
+    const saved = await saveExport(`${safeName(name)}.docx`, notesToDocx(files, pictures));
+    if (saved) status.textContent = `Saved ${saved}`;
+  } catch (error) {
+    failed("The Word document could not be saved", error);
+  }
 }
 
 /** Files a page under a section of its notebook, or under none. */
