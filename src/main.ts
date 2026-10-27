@@ -100,6 +100,7 @@ const toolbar = createToolbar({
     pictureInput.click();
   },
   insertSlides: () => slidesInput.click(),
+  failed: (what, error) => failed(what, error),
 });
 
 const app = document.getElementById("app")!;
@@ -409,6 +410,9 @@ async function deletePage(info: PageInfo) {
 
 async function openPage(info: PageInfo, save = true) {
   if (current?.info === info) return;
+  // A recording going on is finished and kept on its page first.
+  if (current?.canvas.recording) await current.canvas.stopRecording().catch((error) => failed("The recording could not be saved", error));
+  document.querySelector(".tb.record")?.classList.remove("on");
   if (save) await flush();
   let page: PageFile;
   try {

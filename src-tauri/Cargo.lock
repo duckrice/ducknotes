@@ -926,7 +926,7 @@ dependencies = [
 
 [[package]]
 name = "ducknotes"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "percent-encoding",
  "rfd",

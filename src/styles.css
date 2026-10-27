@@ -1372,3 +1372,53 @@ body {
   border-top: 1px solid var(--border, #e5e7eb);
   white-space: pre-wrap;
 }
+
+/* ---- recordings ---------------------------------------------------------------------------- */
+
+.recording {
+  position: absolute;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--panel, #fff);
+}
+
+.recording-bar {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--border, #d1d5db);
+  color: var(--muted, #6b7280);
+  font-size: 12px;
+  cursor: move;
+}
+
+.recording audio {
+  display: block;
+  width: 100%;
+}
+
+.box .heard {
+  position: absolute;
+  top: 2px;
+  left: -22px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #dc2626;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.box .heard[hidden] {
+  display: none;
+}
+
+.tb.record.on {
+  color: #dc2626;
+}
+
+@media print {
+  .box .heard,
+  .recording audio {
+    display: none !important;
+  }
+}

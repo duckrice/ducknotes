@@ -11,7 +11,7 @@ import { createState, createView, insertPictures, searchKey, stepSize } from "./
 import { bounds, movedTogether, newItemId, type Box, type Item } from "./geometry";
 import { InkLayer, pen, type Tool } from "./ink";
 import { emptyDoc, schema } from "./schema";
-import { pictureUrl, savePicture, type BoxItem, type PageFile, type PageItem, type Paper, type PictureItem } from "./store";
+import { pictureUrl, savePicture, type AudioItem, type BoxItem, type Heard, type PageFile, type PageItem, type Paper, type PictureItem } from "./store";
 
 const LEFT = 48;
 const TOP = 110;
@@ -35,6 +35,7 @@ export interface CanvasHooks {
 interface Snapshot {
   boxes: BoxItem[];
   pictures: PictureItem[];
+  recordings: AudioItem[];
   ink: Item[];
 }
 
@@ -72,8 +73,15 @@ class TextBox {
     });
     bar.addEventListener("pointerdown", (event) => canvas.dragObject(event, this.item.id, "move"));
     grip.addEventListener("pointerdown", (event) => canvas.dragObject(event, this.item.id, "width"));
+    this.heard = h("button", { type: "button", class: "heard", title: "Play the recording from when this was written", "aria-label": "Play the recording from here", hidden: !item.heard }, "▶");
+    this.heard.addEventListener("pointerdown", (event) => event.stopPropagation());
+    this.heard.addEventListener("click", () => this.item.heard && canvas.playFrom(this.item.heard));
+    this.el.append(this.heard);
     this.place();
   }
+
+  /** The button that plays the recording from when this was written. */
+  heard: HTMLElement;
 
   place() {
     this.el.style.left = `${this.item.x}px`;
@@ -83,6 +91,34 @@ class TextBox {
 
   toItem(): BoxItem {
     return { ...this.item, t: "box", doc: this.view.state.doc.toJSON() };
+  }
+}
+
+/** A recording on the page: a player, moved by its top bar. */
+class Recording {
+  el: HTMLElement;
+  audio: HTMLAudioElement;
+
+  constructor(
+    public item: AudioItem,
+    canvas: Canvas,
+  ) {
+    const minutes = `${Math.floor(item.seconds / 60)}:${String(Math.round(item.seconds % 60)).padStart(2, "0")}`;
+    const bar = h("div", { class: "recording-bar", title: "Drag to move. Click, then Delete, to remove." }, `Recording · ${minutes}`);
+    this.audio = h("audio", { controls: true, preload: "metadata" }) as HTMLAudioElement;
+    this.el = h("div", { class: "recording", "data-id": item.id }, bar, this.audio);
+    void pictureUrl(item.src).then(
+      (url) => (this.audio.src = url),
+      () => this.el.classList.add("missing"),
+    );
+    bar.addEventListener("pointerdown", (event) => canvas.dragObject(event, item.id, "move"));
+    this.place();
+  }
+
+  place() {
+    this.el.style.left = `${this.item.x}px`;
+    this.el.style.top = `${this.item.y}px`;
+    this.el.style.width = `${this.item.w}px`;
   }
 }
 
@@ -124,6 +160,9 @@ export class Canvas {
   private inkItems: Item[];
   private boxes = new Map<string, TextBox>();
   private pictures = new Map<string, Picture>();
+  private recordings = new Map<string, Recording>();
+  /** A recording being made: its id (for the text written meanwhile), when it started, and the recorder. */
+  private recorder: { id: string; started: number; media: MediaRecorder; chunks: Blob[] } | null = null;
   private past: Snapshot[] = [];
   private future: Snapshot[] = [];
   /** Whether the last change was to the canvas (moving, drawing) rather than to text. */
@@ -158,7 +197,7 @@ export class Canvas {
     this.paper = page.paper;
     this.world.dataset.paper = page.paper;
 
-    this.inkItems = page.items.filter((item): item is Item => item.t !== "box" && item.t !== "picture");
+    this.inkItems = page.items.filter((item): item is Item => item.t !== "box" && item.t !== "picture" && item.t !== "audio");
     this.ink = new InkLayer({
       items: () => this.inkItems,
       commit: (items) => {
@@ -176,6 +215,7 @@ export class Canvas {
     for (const item of page.items) {
       if (item.t === "box") this.addBox(item, item.doc);
       else if (item.t === "picture") this.addPicture(item);
+      else if (item.t === "audio") this.addRecording(item);
     }
     this.ink.draw();
     this.setTool(pen.tool);
@@ -392,7 +432,7 @@ export class Canvas {
     if (event.button !== 0 || pen.tool !== "type") return;
     event.preventDefault();
     event.stopPropagation();
-    const thing = this.boxes.get(id) ?? this.pictures.get(id);
+    const thing = this.boxes.get(id) ?? this.pictures.get(id) ?? this.recordings.get(id);
     if (!thing) return;
     this.choose(id);
     const before = this.snapshot();
@@ -631,8 +671,67 @@ export class Canvas {
   textChanged(view: EditorView, docChanged: boolean) {
     this.hooks.onActive(view);
     if (!docChanged) return;
+    // Written while recording: the box remembers when, the first time.
+    const box = [...this.boxes.values()].find((b) => b.view === view);
+    if (this.recorder && box && !box.item.heard) {
+      box.item.heard = { rec: this.recorder.id, at: Math.round((Date.now() - this.recorder.started) / 100) / 10 };
+      box.heard.hidden = false;
+    }
     this.lastWasCanvas = false;
     this.changed(false);
+  }
+
+  // ---- recordings ---------------------------------------------------------------------
+
+  private addRecording(item: AudioItem): Recording {
+    const rec = new Recording(item, this);
+    this.recordings.set(item.id, rec);
+    this.world.insertBefore(rec.el, this.world.querySelector(".box") ?? this.ink.svg);
+    return rec;
+  }
+
+  get recording(): boolean {
+    return !!this.recorder;
+  }
+
+  /** Starts recording sound from the microphone; text written meanwhile is linked to the moment. */
+  async startRecording() {
+    if (this.recorder) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const media = new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    media.addEventListener("dataavailable", (event) => event.data.size && chunks.push(event.data));
+    media.start(1000);
+    this.recorder = { id: newItemId(), started: Date.now(), media, chunks };
+    this.world.classList.add("recording-now");
+  }
+
+  /** Stops recording and puts the recording on the page. */
+  async stopRecording() {
+    const r = this.recorder;
+    if (!r) return;
+    this.recorder = null;
+    this.world.classList.remove("recording-now");
+    await new Promise<void>((resolve) => {
+      r.media.addEventListener("stop", () => resolve(), { once: true });
+      r.media.stop();
+    });
+    for (const track of r.media.stream.getTracks()) track.stop();
+    const seconds = Math.round((Date.now() - r.started) / 1000);
+    const src = await savePicture(new Blob(r.chunks, { type: "audio/webm" }));
+    const [x, y] = this.insertionPoint();
+    this.record();
+    this.addRecording({ t: "audio", id: r.id, x: Math.round(x), y: Math.round(y), w: 320, src, seconds });
+    this.changed(true);
+  }
+
+  /** Plays a recording from a little before something was written. */
+  playFrom(heard: Heard) {
+    const rec = this.recordings.get(heard.rec);
+    if (!rec) return this.hooks.onError("The recording isn't on this page any more", new Error(heard.rec));
+    rec.audio.currentTime = Math.max(0, heard.at - 2);
+    void rec.audio.play();
+    rec.el.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   // ---- pictures ---------------------------------------------------------------------
@@ -727,6 +826,7 @@ export class Canvas {
     return {
       boxes: [...this.boxes.values()].map((box) => box.toItem()),
       pictures: [...this.pictures.values()].map((pic) => ({ ...pic.item })),
+      recordings: [...this.recordings.values()].map((rec) => ({ ...rec.item })),
       ink: this.inkItems,
     };
   }
@@ -755,6 +855,9 @@ export class Canvas {
     for (const pic of this.pictures.values()) pic.el.remove();
     this.pictures.clear();
     for (const item of snapshot.pictures) this.addPicture({ ...item });
+    for (const rec of this.recordings.values()) rec.el.remove();
+    this.recordings.clear();
+    for (const item of snapshot.recordings) this.addRecording({ ...item });
     this.inkItems = snapshot.ink;
     this.ink.refresh();
     this.setGroup([]);
@@ -798,6 +901,7 @@ export class Canvas {
   toPage(): PageFile {
     const items: PageItem[] = [
       ...[...this.pictures.values()].map((pic) => pic.item),
+      ...[...this.recordings.values()].map((rec) => rec.item),
       ...[...this.boxes.values()].filter((box) => !isEmpty(box.view)).map((box) => box.toItem()),
       ...this.inkItems,
     ];
@@ -819,6 +923,8 @@ export class Canvas {
   }
 
   destroy() {
+    // shortcut: a recording still going when the page closes is dropped; the page switch stops it first (main.ts).
+    if (this.recorder) for (const track of this.recorder.media.stream.getTracks()) track.stop();
     this.resize.disconnect();
     for (const box of this.boxes.values()) box.view.destroy();
     this.scroller.remove();

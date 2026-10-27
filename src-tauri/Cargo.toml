@@ -1,6 +1,6 @@
 [package]
 name = "ducknotes"
-version = "1.7.0"
+version = "1.8.0"
 description = "Notes for lectures and meetings, kept on your own computer"
 authors = ["Duckrice"]
 edition = "2021"

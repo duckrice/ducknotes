@@ -42,6 +42,7 @@ export interface ToolbarHooks {
   insertPicture(): void;
   /** Lecture slides from a PDF, to write on. */
   insertSlides(): void;
+  failed(what: string, error: unknown): void;
 }
 
 export function createToolbar(hooks: ToolbarHooks) {
@@ -184,6 +185,14 @@ export function createToolbar(hooks: ToolbarHooks) {
 
   // ---- links ----------------------------------------------------------------------
 
+  // Recording a lecture: on again to stop. What's written meanwhile plays it from that moment.
+  const recordButton = h("button", { type: "button", class: "tb record", title: "Record sound (a lecture); click again to stop. Text written meanwhile can play it from that moment.", "aria-label": "Record sound", html: icon("record") });
+  recordButton.addEventListener("click", () => {
+    const canvas = hooks.canvas();
+    if (!canvas) return;
+    const done = () => recordButton.classList.toggle("on", canvas.recording);
+    void (canvas.recording ? canvas.stopRecording() : canvas.startRecording()).then(done, (error) => (done(), hooks.failed("Recording didn't start (is a microphone connected?)", error)));
+  });
   const linkButton = button("link", "Link (Ctrl+K)", () => editLink(), markOn(m.link));
   function editLink() {
     const view = hooks.view();
@@ -317,6 +326,7 @@ export function createToolbar(hooks: ToolbarHooks) {
         table,
         button("picture", "Picture (or just paste one with Ctrl+V)", () => hooks.insertPicture()),
         button("pdf", "Slides from a PDF, to write and draw on (or drop the PDF on the page)", () => hooks.insertSlides()),
+        recordButton,
         button("equation", "Equation (Alt+=)", () => {
           const view = hooks.view();
           if (view) insertEquation(view);
