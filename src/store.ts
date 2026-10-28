@@ -8,15 +8,11 @@ import type { Item } from "./geometry";
 /** The background of a page: blank, ruled lines, or squares. */
 export type Paper = "plain" | "lines" | "grid";
 /** A text box on the page, holding its text as ProseMirror JSON. */
-export type BoxItem = { t: "box"; id: string; x: number; y: number; w: number; doc: unknown; heard?: Heard };
-/** When a text box was written during a recording: which one, and how far into it (seconds). */
-export type Heard = { rec: string; at: number };
-/** A sound recording on the page (of a lecture), as OneNote's: the text written meanwhile plays it from there. */
-export type AudioItem = { t: "audio"; id: string; x: number; y: number; w: number; src: string; seconds: number };
+export type BoxItem = { t: "box"; id: string; x: number; y: number; w: number; doc: unknown };
 /** A picture placed on the page; `slide` marks a page of lecture slides, to write on. */
 export type PictureItem = { t: "picture"; id: string; x: number; y: number; w: number; src: string; slide?: true };
 /** Everything on a page: text boxes, pictures, and ink and shapes (drawn on top). */
-export type PageItem = BoxItem | PictureItem | AudioItem | Item;
+export type PageItem = BoxItem | PictureItem | Item;
 
 export interface PageFile {
   title: string;
@@ -157,7 +153,7 @@ export function restore(trashed: string, path: string): Promise<void> {
   return invoke("rename_path", { from: trashed, to: path });
 }
 
-const EXTENSIONS: Record<string, string> = { "audio/webm": "webm", "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/bmp": "bmp", "image/svg+xml": "svg" };
+const EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/bmp": "bmp", "image/svg+xml": "svg" };
 
 /** Stores a picture with the notes and returns its place, for the image's src. */
 export async function savePicture(blob: Blob): Promise<string> {

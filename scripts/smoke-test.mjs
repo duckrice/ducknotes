@@ -42,7 +42,7 @@ async function session(port, run) {
       DUCKNOTES_TEST_OFFSCREEN: "1",
       DUCKNOTES_TEST_EXPORT: join(work, "export.docx"),
       DUCKNOTES_MULTI_INSTANCE: "1",
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --use-fake-ui-for-media-stream --use-fake-device-for-media-stream`,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding`,
       WEBVIEW2_USER_DATA_FOLDER: profile,
     },
     stdio: "ignore",
@@ -553,30 +553,6 @@ await session(9473, async (app) => {
   check("and makes a PDF of it", (pdf.result?.data?.length ?? 0) > 5000, String(pdf.result?.data?.length));
   await app.send("Emulation.setEmulatedMedia", { media: "" });
   check("no errors with slides and picking", app.errors.length === 0, app.errors.join("; "));
-});
-
-// Recording a lecture (a test microphone): what's written meanwhile plays the recording from that moment.
-await session(9474, async (app) => {
-  await app.waitFor(`!!window.__ducknotes.canvas()`, 8000);
-  await app.evaluate(`window.__ducknotes.canvas().focusText()`);
-  await app.evaluate(`document.querySelector(".tb.record").click()`);
-  check("the record button starts recording", await app.waitFor(`document.querySelector(".tb.record").classList.contains("on")`, 5000));
-  await sleep(2500);
-  await app.evaluate(`window.__ducknotes.canvas().focusText()`);
-  await app.type(" Written during the lecture");
-  await sleep(500);
-  await app.evaluate(`document.querySelector(".tb.record").click()`);
-  check("and again stops it, putting the recording on the page", await app.waitFor(`!!document.querySelector(".recording audio") && !document.querySelector(".tb.record").classList.contains("on")`, 8000));
-  check("the text written meanwhile can play it from that moment", await app.waitFor(`!!document.querySelector(".box .heard:not([hidden])")`, 2000));
-  await app.evaluate(`window.__ducknotes.flush()`);
-  await sleep(800);
-  const saved = readdirSync(notesDir).filter((n) => !n.startsWith(".")).flatMap((n) => notebookFiles(n).map((f) => readNote(n, f))).flatMap((p) => p.items);
-  const audio = saved.find((i) => i.t === "audio");
-  const heard = saved.find((i) => i.t === "box" && i.heard);
-  check("both are saved with the page", !!audio && audio.seconds >= 2 && existsSync(join(notesDir, audio.src)) && heard?.heard.rec === audio.id && heard.heard.at >= 2, JSON.stringify([audio, heard?.heard]));
-  await app.evaluate(`document.querySelector(".box .heard:not([hidden])").click()`);
-  check("and clicking ▶ plays it", await app.waitFor(`!document.querySelector(".recording audio").paused`, 5000));
-  check("no errors with recording", app.errors.length === 0, app.errors.join("; "));
 });
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");

@@ -195,7 +195,7 @@ export function notesToDocx(pages: PageFile[], pictures: Map<string, Picture | n
       if (item.t === "box") body.push(w.blocks(((item.doc as J | null)?.content ?? []) as J[]));
       else if (item.t === "picture") body.push(`<w:p>${w.picture(item.src, item.w)}</w:p>`);
     }
-    if (page.items.some((it) => it.t !== "box" && it.t !== "picture" && it.t !== "audio")) body.push('<w:p><w:r><w:rPr><w:i/><w:color w:val="808080"/></w:rPr><w:t>(This page also has drawings, which aren\'t included here.)</w:t></w:r></w:p>');
+    if (page.items.some((it) => it.t !== "box" && it.t !== "picture")) body.push('<w:p><w:r><w:rPr><w:i/><w:color w:val="808080"/></w:rPr><w:t>(This page also has drawings, which aren\'t included here.)</w:t></w:r></w:p>');
   });
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}"><w:body>${body.join("")}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
   const style = (id: string, name: string, pPr: string, rPr: string) => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr>${pPr}</w:pPr><w:rPr>${rPr}</w:rPr></w:style>`;
