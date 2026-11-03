@@ -24,6 +24,8 @@ fn inside(relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
     let plain = !relative.is_empty()
         && !relative.contains(':')
+        // A separator on Windows, an ordinary letter on Linux: refused on both, so a note works the same on each.
+        && !relative.contains('\\')
         && path.components().all(|part| matches!(part, Component::Normal(_)));
     if !plain {
         return Err(format!("Not a place in the notes folder: {relative}"));

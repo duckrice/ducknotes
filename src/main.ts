@@ -270,7 +270,7 @@ async function renameNotebookNamed(name: string) {
 
 async function deleteNotebook(name: string) {
   const count = pages.filter((p) => p.notebook === name).length;
-  const sure = await ask(`Delete ${name}?`, `The notebook and its ${count} page${count === 1 ? "" : "s"} go to the trash folder in Documents\\DuckNotes, so they can be got back.`, "Delete notebook");
+  const sure = await ask(`Delete ${name}?`, `The notebook and its ${count} page${count === 1 ? "" : "s"} go to the trash folder in Documents/DuckNotes, so they can be got back.`, "Delete notebook");
   if (!sure) return;
   await flush();
   try {
