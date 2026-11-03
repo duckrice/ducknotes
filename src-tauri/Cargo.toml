@@ -25,6 +25,13 @@ serde_json = "1"
 # Windows' own Save dialog, for exports (the path comes from the dialog, never from the page).
 rfd = "0.15"
 
+# Spelling elsewhere (Linux): the system's Hunspell dictionaries; tests check that code on Windows too.
+[target.'cfg(not(windows))'.dependencies]
+spellbook = "0.4"
+
+[dev-dependencies]
+spellbook = "0.4"
+
 [target.'cfg(windows)'.dependencies]
 # Windows' own spell checker, in every language the user has (Norwegian and English at once).
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "System_UserProfile"] }

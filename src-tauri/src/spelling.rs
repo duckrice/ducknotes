@@ -177,17 +177,137 @@ mod imp {
     }
 }
 
+// Elsewhere (Linux): the Hunspell dictionaries the system has installed, such as
+// /usr/share/hunspell/nb_NO.dic (on Arch: pacman -S hunspell-en_us, and the
+// language's own hunspell package), for the languages in LANGUAGE/LANG and English.
 #[cfg(not(windows))]
-mod imp {
-    pub type Checkers = ();
-    pub fn checkers() -> Checkers {}
-    pub fn languages(_: &Checkers) -> Vec<String> {
-        Vec::new()
+use hunspell as imp;
+
+#[cfg(any(not(windows), test))]
+mod hunspell {
+    use spellbook::Dictionary;
+    use std::path::PathBuf;
+
+    pub type Checkers = Vec<(String, Dictionary)>;
+
+    /// "nb_NO.UTF-8" and "nb-NO" both as "nb_NO"; "C" and "POSIX" are no language.
+    fn tag(locale: &str) -> Option<String> {
+        let name = locale.split(['.', '@']).next()?.replace('-', "_");
+        (!name.is_empty() && name != "C" && name != "POSIX").then_some(name)
     }
-    pub fn correct(_: &Checkers, _: &str) -> bool {
-        true
+
+    fn user_languages() -> Vec<String> {
+        let list = std::env::var("DUCKWRITER_SPELL_LANGUAGES")
+            .ok()
+            .map(|l| l.replace(',', ":"))
+            .or_else(|| ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|v| std::env::var(v).ok().filter(|s| !s.is_empty())))
+            .unwrap_or_default();
+        let mut tags: Vec<String> = list.split(':').filter_map(tag).collect();
+        if !tags.iter().any(|t| t.to_lowercase().starts_with("en")) {
+            tags.extend(["en_US".to_string(), "en_GB".to_string(), "en".to_string()]);
+        }
+        tags
     }
-    pub fn suggest(_: &Checkers, _: &str) -> Vec<String> {
-        Vec::new()
+
+    fn folders() -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = std::env::var("DICPATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+        if let Some(home) = std::env::var_os("HOME") {
+            out.push(PathBuf::from(home).join(".local/share/hunspell"));
+        }
+        out.extend(["/usr/share/hunspell", "/usr/share/myspell", "/usr/share/myspell/dicts"].map(PathBuf::from));
+        out
+    }
+
+    /// Dictionaries are often Latin-1 ("SET ISO8859-1"); spellbook reads only UTF-8.
+    fn text(bytes: Vec<u8>) -> String {
+        String::from_utf8(bytes).unwrap_or_else(|e| e.into_bytes().iter().map(|&b| b as char).collect())
+    }
+
+    /// The dictionary named exactly, else the first of the language ("nb" → nb_NO.dic).
+    fn find(dirs: &[PathBuf], tag: &str) -> Option<(String, PathBuf)> {
+        let lower = tag.to_lowercase();
+        for dir in dirs {
+            let Ok(entries) = std::fs::read_dir(dir) else { continue };
+            let mut names: Vec<String> = entries.filter_map(|e| e.ok()?.file_name().into_string().ok()?.strip_suffix(".dic").map(str::to_string)).collect();
+            names.sort();
+            let hit = names.iter().find(|n| n.to_lowercase() == lower).or_else(|| names.iter().find(|n| n.to_lowercase().starts_with(&format!("{lower}_"))));
+            if let Some(name) = hit {
+                return Some((name.clone(), dir.join(name)));
+            }
+        }
+        None
+    }
+
+    pub fn checkers() -> Checkers {
+        checkers_in(&folders(), &user_languages())
+    }
+
+    pub fn checkers_in(dirs: &[PathBuf], tags: &[String]) -> Checkers {
+        let mut out: Checkers = Vec::new();
+        let english = |t: &str| t.to_lowercase().starts_with("en_");
+        for tag in tags {
+            let Some((name, base)) = find(dirs, tag) else { continue };
+            if out.iter().any(|(t, _)| *t == name || (english(t) && english(&name))) {
+                continue;
+            }
+            let (Ok(aff), Ok(dic)) = (std::fs::read(base.with_extension("aff")), std::fs::read(base.with_extension("dic"))) else { continue };
+            if let Ok(dictionary) = Dictionary::new(&text(aff), &text(dic)) {
+                out.push((name, dictionary));
+            }
+        }
+        out
+    }
+
+    pub fn languages(checkers: &Checkers) -> Vec<String> {
+        checkers.iter().map(|(tag, _)| tag.replace('_', "-")).collect()
+    }
+
+    pub fn correct(checkers: &Checkers, word: &str) -> bool {
+        checkers.is_empty() || checkers.iter().any(|(_, d)| d.check(word))
+    }
+
+    pub fn suggest(checkers: &Checkers, word: &str) -> Vec<String> {
+        let lists: Vec<Vec<String>> = checkers
+            .iter()
+            .map(|(_, d)| {
+                let mut list = Vec::new();
+                d.suggest(word, &mut list);
+                list
+            })
+            .collect();
+        // Each language's best guess first, then the second ones, and so on.
+        let mut out: Vec<String> = Vec::new();
+        for rank in 0..lists.iter().map(Vec::len).max().unwrap_or(0) {
+            for list in &lists {
+                if let Some(s) = list.get(rank) {
+                    if !out.contains(s) && s != word {
+                        out.push(s.clone());
+                    }
+                }
+            }
+        }
+        out.truncate(8);
+        out
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn checks_and_suggests_with_a_latin1_dictionary() {
+            let dir = std::env::temp_dir().join(format!("duck-hunspell-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("nb_NO.aff"), b"SET ISO8859-1\nTRY e\xe6\xf8\xe5\n").unwrap();
+            std::fs::write(dir.join("nb_NO.dic"), b"2\nhei\nbl\xe5b\xe6r\n").unwrap();
+            let checkers = checkers_in(&[dir.clone()], &["nb".to_string()]);
+            assert_eq!(languages(&checkers), ["nb-NO"]);
+            assert!(correct(&checkers, "blåbær"));
+            assert!(!correct(&checkers, "blåbar"));
+            assert!(suggest(&checkers, "blåbar").contains(&"blåbær".to_string()));
+            assert_eq!(tag("nb_NO.UTF-8").as_deref(), Some("nb_NO"));
+            assert_eq!(tag("C"), None);
+            std::fs::remove_dir_all(dir).ok();
+        }
     }
 }
